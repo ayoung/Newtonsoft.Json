@@ -98,7 +98,6 @@
     <Compile Include="JsonValidatingReader.cs" />
     <Compile Include="JsonWriter.cs" />
     <Compile Include="JsonWriterException.cs" />
-    <Compile Include="Linq\ComponentModel\JPropertyDescriptor.cs" />
     <Compile Include="Linq\Extensions.cs" />
     <Compile Include="Linq\IJEnumerable.cs" />
     <Compile Include="Linq\JArray.cs" />
@@ -108,6 +107,7 @@
     <Compile Include="Linq\JObject.cs" />
     <Compile Include="Linq\JPath.cs" />
     <Compile Include="Linq\JProperty.cs" />
+    <Compile Include="Linq\JPropertyDescriptor.cs" />
     <Compile Include="Linq\JRaw.cs" />
     <Compile Include="Linq\JToken.cs" />
     <Compile Include="Linq\JTokenEqualityComparer.cs" />
@@ -175,6 +175,7 @@
     <Compile Include="Utilities\ILGeneratorExtensions.cs" />
     <Compile Include="Utilities\JavaScriptUtils.cs" />
     <Compile Include="Utilities\LateBoundReflectionDelegateFactory.cs" />
+    <Compile Include="Utilities\LinqBridge.cs" />
     <Compile Include="Utilities\ListWrapper.cs" />
     <Compile Include="Utilities\MathUtils.cs" />
     <Compile Include="Utilities\MethodCall.cs" />

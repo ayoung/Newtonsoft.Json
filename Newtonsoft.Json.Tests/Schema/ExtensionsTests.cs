@@ -32,7 +32,7 @@ using Newtonsoft.Json.Schema;
 using Newtonsoft.Json.Linq;
 using System.IO;
 using Newtonsoft.Json.Tests.TestObjects;
-#if !SILVERLIGHT
+#if !(SILVERLIGHT || MONOTOUCH || MONODROID)
 using System.Data;
 #endif
 
@@ -186,7 +186,7 @@ namespace Newtonsoft.Json.Tests.Schema
 #if !NET20 && !PocketPC
       GenerateSchemaAndSerializeFromType(new NullableDateTimeTestClass());
 #endif
-#if !SILVERLIGHT
+#if !(SILVERLIGHT || MONOTOUCH || MONODROID)
       GenerateSchemaAndSerializeFromType(new DataSet());
 #endif
       GenerateSchemaAndSerializeFromType(new object());

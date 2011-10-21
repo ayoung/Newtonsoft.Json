@@ -29,6 +29,7 @@ using System.Reflection;
 using System.Collections;
 using System.Linq;
 using System.Globalization;
+using System.Runtime.Serialization;
 using System.Runtime.Serialization.Formatters;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -37,6 +38,21 @@ namespace Newtonsoft.Json.Utilities
 {
   internal static class ReflectionUtils
   {
+    public static bool IsVirtual(this PropertyInfo propertyInfo)
+    {
+      ValidationUtils.ArgumentNotNull(propertyInfo, "propertyInfo");
+
+      MethodInfo m = propertyInfo.GetGetMethod();
+      if (m != null && m.IsVirtual)
+        return true;
+
+      m = propertyInfo.GetSetMethod();
+      if (m != null && m.IsVirtual)
+        return true;
+
+      return false;
+    }
+
     public static Type GetObjectType(object v)
     {
       return (v != null) ? v.GetType() : null;
@@ -44,10 +60,31 @@ namespace Newtonsoft.Json.Utilities
 
     public static string GetTypeName(Type t, FormatterAssemblyStyle assemblyFormat)
     {
+      return GetTypeName(t, assemblyFormat, null);
+    }
+
+    public static string GetTypeName(Type t, FormatterAssemblyStyle assemblyFormat, SerializationBinder binder)
+    {
+      string fullyQualifiedTypeName;
+#if !(NET20 || NET35)
+      if (binder != null)
+      {
+        string assemblyName, typeName;
+        binder.BindToName(t, out assemblyName, out typeName);
+        fullyQualifiedTypeName = typeName + (assemblyName == null ? "" : ", " + assemblyName);
+      }
+      else
+      {
+        fullyQualifiedTypeName = t.AssemblyQualifiedName;
+      }
+#else
+      fullyQualifiedTypeName = t.AssemblyQualifiedName;
+#endif
+
       switch (assemblyFormat)
       {
         case FormatterAssemblyStyle.Simple:
-          return GetSimpleTypeName(t);
+          return RemoveAssemblyDetails(fullyQualifiedTypeName);
         case FormatterAssemblyStyle.Full:
           return t.AssemblyQualifiedName;
         default:
@@ -55,19 +92,8 @@ namespace Newtonsoft.Json.Utilities
       }
     }
 
-    private static string GetSimpleTypeName(Type type)
+    private static string RemoveAssemblyDetails(string fullyQualifiedTypeName)
     {
-#if !SILVERLIGHT
-      string fullyQualifiedTypeName = type.FullName + ", " + type.Assembly.GetName().Name;
-
-      // for type names with no nested type names then return
-      if (!type.IsGenericType || type.IsGenericTypeDefinition)
-        return fullyQualifiedTypeName;
-#else
-      // Assembly.GetName() is marked SecurityCritical
-      string fullyQualifiedTypeName = type.AssemblyQualifiedName;
-#endif
-
       StringBuilder builder = new StringBuilder();
 
       // loop through the type name and filter out qualified assembly details from nested type names
@@ -600,17 +626,18 @@ namespace Newtonsoft.Json.Utilities
     /// </summary>
     /// <param name="member">The MemberInfo to determine whether can be set.</param>
     /// <param name="nonPublic">if set to <c>true</c> then allow the member to be set non-publicly.</param>
+    /// <param name="canSetReadOnly">if set to <c>true</c> then allow the member to be set if read-only.</param>
     /// <returns>
     /// 	<c>true</c> if the specified MemberInfo can be set; otherwise, <c>false</c>.
     /// </returns>
-    public static bool CanSetMemberValue(MemberInfo member, bool nonPublic)
+    public static bool CanSetMemberValue(MemberInfo member, bool nonPublic, bool canSetReadOnly)
     {
       switch (member.MemberType)
       {
         case MemberTypes.Field:
           FieldInfo fieldInfo = (FieldInfo)member;
 
-          if (fieldInfo.IsInitOnly)
+          if (fieldInfo.IsInitOnly && !canSetReadOnly)
             return false;
           if (nonPublic)
             return true;
@@ -705,6 +732,9 @@ namespace Newtonsoft.Json.Utilities
 
       // http://hyperthink.net/blog/getcustomattributes-gotcha/
       // ICustomAttributeProvider doesn't do inheritance
+
+      if (attributeProvider is Type)
+        return (T[])((Type)attributeProvider).GetCustomAttributes(typeof(T), inherit);
 
       if (attributeProvider is Assembly)
         return (T[])Attribute.GetCustomAttributes((Assembly)attributeProvider, typeof(T), inherit);
@@ -851,6 +881,23 @@ namespace Newtonsoft.Json.Utilities
       return null;
     }
 
+    public static MemberInfo GetMemberInfoFromType(Type targetType, MemberInfo memberInfo)
+    {
+      BindingFlags bindingAttr = BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic;
+
+      switch (memberInfo.MemberType)
+      {
+        case MemberTypes.Property:
+          PropertyInfo propertyInfo = (PropertyInfo) memberInfo;
+
+          Type[] types = propertyInfo.GetIndexParameters().Select(p => p.ParameterType).ToArray();
+
+          return targetType.GetProperty(propertyInfo.Name, bindingAttr, null, propertyInfo.PropertyType, types, null);
+        default:
+          return targetType.GetMember(memberInfo.Name, memberInfo.MemberType, bindingAttr).SingleOrDefault();
+      }
+    }
+
     public static IEnumerable<FieldInfo> GetFields(Type targetType, BindingFlags bindingAttr)
     {
       ValidationUtils.ArgumentNotNull(targetType, "targetType");
@@ -896,9 +943,7 @@ namespace Newtonsoft.Json.Utilities
         PropertyInfo member = propertyInfos[i];
         if (member.DeclaringType != targetType)
         {
-          Type[] types = member.GetIndexParameters().Select(p => p.ParameterType).ToArray();
-
-          PropertyInfo declaredMember = member.DeclaringType.GetProperty(member.Name, bindingAttr, null, member.PropertyType, types, null);
+          PropertyInfo declaredMember = (PropertyInfo)GetMemberInfoFromType(member.DeclaringType, member);
           propertyInfos[i] = declaredMember;
         }
       }

@@ -33,9 +33,6 @@ using System.Diagnostics;
 using System.Globalization;
 using System.ComponentModel;
 using System.Collections.Specialized;
-#if !SILVERLIGHT
-using Newtonsoft.Json.Linq.ComponentModel;
-#endif
 
 namespace Newtonsoft.Json.Linq
 {
@@ -43,16 +40,18 @@ namespace Newtonsoft.Json.Linq
   /// Represents a token that can contain other tokens.
   /// </summary>
   public abstract class JContainer : JToken, IList<JToken>
-#if !SILVERLIGHT
+#if !(SILVERLIGHT || MONODROID || MONOTOUCH)
     , ITypedList, IBindingList
-#else
+#elif !(MONODROID || MONOTOUCH)
     , IList, INotifyCollectionChanged
+#else
+        , IList
 #endif
-#if !(SILVERLIGHT || NET20 || NET35)
+#if !(SILVERLIGHT || NET20 || NET35 || MONOTOUCH)
     , INotifyCollectionChanged
 #endif
   {
-#if !SILVERLIGHT
+#if !(SILVERLIGHT || MONODROID || MONOTOUCH)
     /// <summary>
     /// Occurs when the list changes or an item in the list changes.
     /// </summary>
@@ -63,22 +62,21 @@ namespace Newtonsoft.Json.Linq
     /// </summary>
     public event AddingNewEventHandler AddingNew;
 #endif
-#if SILVERLIGHT || !(NET20 || NET35)
+#if !MONOTOUCH && SILVERLIGHT || !(NET20 || NET35)
     /// <summary>
     /// Occurs when the items list of the collection has changed, or the collection is reset.
     /// </summary>
     public event NotifyCollectionChangedEventHandler CollectionChanged;
 #endif
 
-    private JToken _content;
+    /// <summary>
+    /// Gets the container's children tokens.
+    /// </summary>
+    /// <value>The container's children tokens.</value>
+    protected abstract IList<JToken> ChildrenTokens { get; }
+
     private object _syncRoot;
     private bool _busy;
-
-    internal JToken Content
-    {
-      get { return _content; }
-      set { _content = value; }
-    }
 
     internal JContainer()
     {
@@ -88,15 +86,9 @@ namespace Newtonsoft.Json.Linq
     {
       ValidationUtils.ArgumentNotNull(other, "c");
 
-      JToken content = other.Last;
-      if (content != null)
+      foreach (JToken child in other)
       {
-        do
-        {
-          content = content._next;
-          Add(content.CloneToken());
-        }
-        while (content != other.Last);
+        Add(child);
       }
     }
 
@@ -106,7 +98,7 @@ namespace Newtonsoft.Json.Linq
         throw new InvalidOperationException("Cannot change {0} during a collection change event.".FormatWith(CultureInfo.InvariantCulture, GetType()));
     }
 
- #if !SILVERLIGHT
+#if !(SILVERLIGHT || MONODROID || MONOTOUCH)
     /// <summary>
     /// Raises the <see cref="AddingNew"/> event.
     /// </summary>
@@ -140,7 +132,7 @@ namespace Newtonsoft.Json.Linq
       }
     }
 #endif
-#if SILVERLIGHT || !(NET20 || NET35)
+#if SILVERLIGHT && !MONOTOUCH || !(NET20 || NET35) 
     /// <summary>
     /// Raises the <see cref="CollectionChanged"/> event.
     /// </summary>
@@ -172,7 +164,7 @@ namespace Newtonsoft.Json.Linq
     /// </value>
     public override bool HasValues
     {
-      get { return (_content != null); }
+      get { return ChildrenTokens.Count > 0; }
     }
 
     internal bool ContentsEqual(JContainer container)
@@ -209,13 +201,7 @@ namespace Newtonsoft.Json.Linq
     /// </value>
     public override JToken First
     {
-      get
-      {
-        if (Last == null)
-          return null;
-
-        return Last._next;
-      }
+      get { return ChildrenTokens.FirstOrDefault(); }
     }
 
     /// <summary>
@@ -226,8 +212,7 @@ namespace Newtonsoft.Json.Linq
     /// </value>
     public override JToken Last
     {
-      [DebuggerStepThrough]
-      get { return _content; }
+      get { return ChildrenTokens.LastOrDefault(); }
     }
 
     /// <summary>
@@ -238,21 +223,7 @@ namespace Newtonsoft.Json.Linq
     /// </returns>
     public override JEnumerable<JToken> Children()
     {
-      return new JEnumerable<JToken>(ChildrenInternal());
-    }
-
-    internal IEnumerable<JToken> ChildrenInternal()
-    {
-      JToken first = First;
-      JToken current = first;
-      if (current == null)
-        yield break;
-
-      do
-      {
-        yield return current;
-      }
-      while ((current = current.Next) != null);
+      return new JEnumerable<JToken>(ChildrenTokens);
     }
 
     /// <summary>
@@ -264,7 +235,7 @@ namespace Newtonsoft.Json.Linq
     /// </returns>
     public override IEnumerable<T> Values<T>()
     {
-      return Children().Convert<JToken, T>();
+      return ChildrenTokens.Convert<JToken, T>();
     }
 
     /// <summary>
@@ -273,7 +244,7 @@ namespace Newtonsoft.Json.Linq
     /// <returns>An <see cref="IEnumerable{JToken}"/> containing the descendant tokens of the <see cref="JToken"/>.</returns>
     public IEnumerable<JToken> Descendants()
     {
-      foreach (JToken o in Children())
+      foreach (JToken o in ChildrenTokens)
       {
         yield return o;
         JContainer c = o as JContainer;
@@ -292,37 +263,11 @@ namespace Newtonsoft.Json.Linq
       return (content is IEnumerable && !(content is string) && !(content is JToken) && !(content is byte[]));
     }
 
-    internal virtual void AddItem(bool isLast, JToken previous, JToken item)
-    {
-      CheckReentrancy();
-
-      ValidateToken(item, null);
-
-      item = EnsureParentToken(item);
-
-      JToken next = (previous != null) ? previous._next : item;
-
-      item.Parent = this;
-      item.Next = next;
-
-      if (previous != null)
-        previous.Next = item;
-
-      if (isLast || previous == null)
-        _content = item;
-
-#if !SILVERLIGHT
-      if (ListChanged != null)
-        OnListChanged(new ListChangedEventArgs(ListChangedType.ItemAdded, IndexOfItem(item)));
-#endif
-#if SILVERLIGHT || !(NET20 || NET35)
-      if (CollectionChanged != null)
-        OnCollectionChanged(new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Add, item, IndexOfItem(item)));
-#endif
-    }
-
     internal JToken EnsureParentToken(JToken item)
     {
+      if (item == null)
+        return new JValue((object) null);
+
       if (item.Parent != null)
       {
         item = item.CloneToken();
@@ -343,142 +288,157 @@ namespace Newtonsoft.Json.Linq
       return item;
     }
 
-    internal void AddInternal(bool isLast, JToken previous, object content)
-    {
-      if (IsMultiContent(content))
+    private class JTokenReferenceEqualityComparer : IEqualityComparer<JToken>
       {
-        IEnumerable enumerable = (IEnumerable) content;
+      public static readonly JTokenReferenceEqualityComparer Instance = new JTokenReferenceEqualityComparer();
 
-        JToken multiPrevious = previous;
-        foreach (object c in enumerable)
+      public bool Equals(JToken x, JToken y)
         {
-          AddInternal(isLast, multiPrevious, c);
-          multiPrevious = (multiPrevious != null) ? multiPrevious._next : Last;
-        }
+        return ReferenceEquals(x, y);
       }
-      else
-      {
-        JToken item = CreateFromContent(content);
 
-        AddItem(isLast, previous, item);
+      public int GetHashCode(JToken obj)
+      {
+        if (obj == null)
+          return 0;
+
+        return obj.GetHashCode();
       }
     }
 
     internal int IndexOfItem(JToken item)
     {
-      int index = 0;
-      foreach (JToken token in Children())
-      {
-        if (token == item)
-          return index;
-
-        index++;
-      }
-
-      return -1;
+      return ChildrenTokens.IndexOf(item, JTokenReferenceEqualityComparer.Instance);
     }
 
     internal virtual void InsertItem(int index, JToken item)
     {
-      if (index == 0)
-      {
-        AddFirst(item);
-      }
-      else
-      {
-        JToken token = GetItem(index);
-        AddInternal(false, token.Previous, item);
-      }
+      if (index > ChildrenTokens.Count)
+        throw new ArgumentOutOfRangeException("index", "Index must be within the bounds of the List.");
+
+      CheckReentrancy();
+
+      item = EnsureParentToken(item);
+
+      JToken previous = (index == 0) ? null : ChildrenTokens[index - 1];
+      // haven't inserted new token yet so next token is still at the inserting index
+      JToken next = (index == ChildrenTokens.Count) ? null : ChildrenTokens[index];
+
+      ValidateToken(item, null);
+
+      item.Parent = this;
+
+      item.Previous = previous;
+      if (previous != null)
+        previous.Next = item;
+
+      item.Next = next;
+      if (next != null)
+        next.Previous = item;
+
+      ChildrenTokens.Insert(index, item);
+
+#if !(SILVERLIGHT || MONODROID || MONOTOUCH)
+      if (ListChanged != null)
+        OnListChanged(new ListChangedEventArgs(ListChangedType.ItemAdded, index));
+#endif
+#if !MONOTOUCH && SILVERLIGHT || !(NET20 || NET35)
+      if (CollectionChanged != null)
+        OnCollectionChanged(new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Add, item, index));
+#endif
     }
 
     internal virtual void RemoveItemAt(int index)
     {
       if (index < 0)
-        throw new ArgumentOutOfRangeException("index", "index is less than 0.");
+        throw new ArgumentOutOfRangeException("index", "Index is less than 0.");
+      if (index >= ChildrenTokens.Count)
+        throw new ArgumentOutOfRangeException("index", "Index is equal to or greater than Count.");
 
       CheckReentrancy();
 
-      int currentIndex = 0;
-      foreach (JToken token in Children())
-      {
-        if (index == currentIndex)
-        {
-          token.Remove();
+      JToken item = ChildrenTokens[index];
+      JToken previous = (index == 0) ? null : ChildrenTokens[index - 1];
+      JToken next = (index == ChildrenTokens.Count - 1) ? null : ChildrenTokens[index + 1];
 
-#if !SILVERLIGHT
-          OnListChanged(new ListChangedEventArgs(ListChangedType.ItemDeleted, index));
+      if (previous != null)
+        previous.Next = next;
+      if (next != null)
+        next.Previous = previous;
+
+      item.Parent = null;
+      item.Previous = null;
+      item.Next = null;
+
+      ChildrenTokens.RemoveAt(index);
+
+#if !(SILVERLIGHT || MONODROID || MONOTOUCH)
+      OnListChanged(new ListChangedEventArgs(ListChangedType.ItemDeleted, index));
 #endif
-#if SILVERLIGHT || !(NET20 || NET35)
-          OnCollectionChanged(new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Remove, token, index));
+#if !MONOTOUCH && SILVERLIGHT || !(NET20 || NET35)
+      OnCollectionChanged(new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Remove, item, index));
 #endif
-
-          return;
-        }
-
-        currentIndex++;
-      }
-
-      throw new ArgumentOutOfRangeException("index", "index is equal to or greater than Count.");
     }
 
     internal virtual bool RemoveItem(JToken item)
     {
-      if (item == null || item.Parent != this)
-        return false;
-
-      CheckReentrancy();
-
-      JToken content = _content;
-
-      int itemIndex = 0;
-      while (content._next != item)
+      int index = IndexOfItem(item);
+      if (index >= 0)
       {
-        itemIndex++;
-        content = content._next;
-      }
-      if (content == item)
-      {
-        // token is containers last child
-        _content = null;
-      }
-      else
-      {
-        if (_content == item)
-        {
-          _content = content;
-        }
-        content._next = item._next;
-      }
-      item.Parent = null;
-      item.Next = null;
-
-#if !SILVERLIGHT
-      OnListChanged(new ListChangedEventArgs(ListChangedType.ItemDeleted, itemIndex));
-#endif
-#if SILVERLIGHT || !(NET20 || NET35)
-      OnCollectionChanged(new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Remove, item, itemIndex));
-#endif
-
+        RemoveItemAt(index);
       return true;
+    }
+
+      return false;
     }
 
     internal virtual JToken GetItem(int index)
     {
-      return Children().ElementAt(index);
+      return ChildrenTokens[index];
     }
 
     internal virtual void SetItem(int index, JToken item)
     {
+      if (index < 0)
+        throw new ArgumentOutOfRangeException("index", "Index is less than 0.");
+      if (index >= ChildrenTokens.Count)
+        throw new ArgumentOutOfRangeException("index", "Index is equal to or greater than Count.");
+
+      JToken existing = ChildrenTokens[index];
+
+      if (IsTokenUnchanged(existing, item))
+        return;
+
       CheckReentrancy();
 
-      JToken token = GetItem(index);
-      token.Replace(item);
+      item = EnsureParentToken(item);
 
-#if !SILVERLIGHT
+      ValidateToken(item, existing);
+
+      JToken previous = (index == 0) ? null : ChildrenTokens[index - 1];
+      JToken next = (index == ChildrenTokens.Count - 1) ? null : ChildrenTokens[index + 1];
+
+      item.Parent = this;
+
+      item.Previous = previous;
+      if (previous != null)
+        previous.Next = item;
+
+      item.Next = next;
+      if (next != null)
+        next.Previous = item;
+
+      ChildrenTokens[index] = item;
+
+      existing.Parent = null;
+      existing.Previous = null;
+      existing.Next = null;
+
+#if !(SILVERLIGHT || MONODROID || MONOTOUCH)
       OnListChanged(new ListChangedEventArgs(ListChangedType.ItemChanged, index));
 #endif
-#if SILVERLIGHT || !(NET20 || NET35)
-      OnCollectionChanged(new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Replace, item, token, index));
+#if !MONOTOUCH && SILVERLIGHT || !(NET20 || NET35)
+      OnCollectionChanged(new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Replace, item, existing, index));
 #endif
     }
 
@@ -486,27 +446,19 @@ namespace Newtonsoft.Json.Linq
     {
       CheckReentrancy();
 
-      while (_content != null)
+      foreach (JToken item in ChildrenTokens)
       {
-        JToken o = _content;
-
-        JToken next = o._next;
-        if (o != _content || next != o._next)
-          throw new InvalidOperationException("This operation was corrupted by external code.");
-
-        if (next != o)
-          o._next = next._next;
-        else
-          _content = null;
-
-        next.Parent = null;
-        next._next = null;
+        item.Parent = null;
+        item.Previous = null;
+        item.Next = null;
       }
 
-#if !SILVERLIGHT
+      ChildrenTokens.Clear();
+
+#if !(SILVERLIGHT || MONODROID || MONOTOUCH)
       OnListChanged(new ListChangedEventArgs(ListChangedType.Reset, -1));
 #endif
-#if SILVERLIGHT || !(NET20 || NET35)
+#if !MONOTOUCH && SILVERLIGHT || !(NET20 || NET35)
       OnCollectionChanged(new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Reset));
 #endif
     }
@@ -516,51 +468,8 @@ namespace Newtonsoft.Json.Linq
       if (existing == null || existing.Parent != this)
         return;
 
-      if (IsTokenUnchanged(existing, replacement))
-        return;
-
-      CheckReentrancy();
-
-      replacement = EnsureParentToken(replacement);
-
-      ValidateToken(replacement, existing);
-
-      JToken content = _content;
-
-      int itemIndex = 0;
-      while (content._next != existing)
-      {
-        itemIndex++;
-        content = content._next;
-      }
-
-      if (content == existing)
-      {
-        // token is containers last child
-        _content = replacement;
-        replacement._next = replacement;
-      }
-      else
-      {
-        if (_content == existing)
-        {
-          _content = replacement;
-        }
-        content._next = replacement;
-        replacement._next = existing._next;
-      }
-
-      replacement.Parent = this;
-
-      existing.Parent = null;
-      existing.Next = null;
-
-#if !SILVERLIGHT
-      OnListChanged(new ListChangedEventArgs(ListChangedType.ItemChanged, itemIndex));
-#endif
-#if SILVERLIGHT || !(NET20 || NET35)
-      OnCollectionChanged(new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Replace, replacement, existing, itemIndex));
-#endif
+      int index = IndexOfItem(existing);
+      SetItem(index, replacement);
     }
 
     internal virtual bool ContainsItem(JToken item)
@@ -576,20 +485,15 @@ namespace Newtonsoft.Json.Linq
         throw new ArgumentOutOfRangeException("arrayIndex", "arrayIndex is less than 0.");
       if (arrayIndex >= array.Length)
         throw new ArgumentException("arrayIndex is equal to or greater than the length of array.");
-      if (CountItems() > array.Length - arrayIndex)
+      if (Count > array.Length - arrayIndex)
         throw new ArgumentException("The number of elements in the source JObject is greater than the available space from arrayIndex to the end of the destination array.");
 
       int index = 0;
-      foreach (JToken token in Children())
+      foreach (JToken token in ChildrenTokens)
       {
         array.SetValue(token, arrayIndex + index);
         index++;
       }
-    }
-
-    internal virtual int CountItems()
-    {
-      return Children().Count();
     }
 
     internal static bool IsTokenUnchanged(JToken currentValue, JToken newValue)
@@ -619,9 +523,9 @@ namespace Newtonsoft.Json.Linq
     /// Adds the specified content as children of this <see cref="JToken"/>.
     /// </summary>
     /// <param name="content">The content to be added.</param>
-    public void Add(object content)
+    public virtual void Add(object content)
     {
-      AddInternal(true, Last, content);
+      AddInternal(ChildrenTokens.Count, content);
     }
 
     /// <summary>
@@ -630,7 +534,28 @@ namespace Newtonsoft.Json.Linq
     /// <param name="content">The content to be added.</param>
     public void AddFirst(object content)
     {
-      AddInternal(false, Last, content);
+      AddInternal(0, content);
+    }
+
+    internal void AddInternal(int index, object content)
+    {
+      if (IsMultiContent(content))
+      {
+        IEnumerable enumerable = (IEnumerable)content;
+
+        int multiIndex = index;
+        foreach (object c in enumerable)
+        {
+          AddInternal(multiIndex, c);
+          multiIndex++;
+        }
+      }
+      else
+      {
+        JToken item = CreateFromContent(content);
+
+        InsertItem(index, item);
+      }
     }
 
     internal JToken CreateFromContent(object content)
@@ -790,14 +715,14 @@ namespace Newtonsoft.Json.Linq
     internal int ContentsHashCode()
     {
       int hashCode = 0;
-      foreach (JToken item in Children())
+      foreach (JToken item in ChildrenTokens)
       {
         hashCode ^= item.GetDeepHashCode();
       }
       return hashCode;
     }
 
-#if !SILVERLIGHT
+#if !(SILVERLIGHT || MONODROID || MONOTOUCH)
     string ITypedList.GetListName(PropertyDescriptor[] listAccessors)
     {
       return string.Empty;
@@ -860,11 +785,6 @@ namespace Newtonsoft.Json.Linq
       CopyItemsTo(array, arrayIndex);
     }
 
-    int ICollection<JToken>.Count
-    {
-      get { return CountItems(); }
-    }
-
     bool ICollection<JToken>.IsReadOnly
     {
       get { return false; }
@@ -893,7 +813,7 @@ namespace Newtonsoft.Json.Linq
     int IList.Add(object value)
     {
       Add(EnsureValue(value));
-      return CountItems() - 1;
+      return Count - 1;
     }
 
     void IList.Clear()
@@ -951,9 +871,13 @@ namespace Newtonsoft.Json.Linq
       CopyItemsTo(array, index);
     }
 
-    int ICollection.Count
+    /// <summary>
+    /// Gets the count of child JSON tokens.
+    /// </summary>
+    /// <value>The count of child JSON tokens</value>
+    public int Count
     {
-      get { return CountItems(); }
+      get { return ChildrenTokens.Count; }
     }
 
     bool ICollection.IsSynchronized
@@ -977,7 +901,7 @@ namespace Newtonsoft.Json.Linq
 
     #region IBindingList Members
 
-#if !SILVERLIGHT
+#if !(SILVERLIGHT || MONODROID || MONOTOUCH)
     void IBindingList.AddIndex(PropertyDescriptor property)
     {
     }

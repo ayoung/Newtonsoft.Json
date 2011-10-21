@@ -26,7 +26,7 @@ namespace Newtonsoft.Json.Tests.Linq
       Assert.AreEqual(p, p.Value.Parent);
     }
 
-#if !SILVERLIGHT
+#if !(SILVERLIGHT || MONOTOUCH || MONODROID)
     [Test]
     public void ListChanged()
     {

@@ -55,6 +55,16 @@ namespace Newtonsoft.Json
     private int _currentLineNumber;
     private bool _end;
     private ReadType _readType;
+    private CultureInfo _culture;
+
+    /// <summary>
+    /// Gets or sets the culture used when reading JSON. Defaults to <see cref="CultureInfo.CurrentCulture"/>.
+    /// </summary>
+    public CultureInfo Culture
+    {
+      get { return _culture ?? CultureInfo.CurrentCulture; }
+      set { _culture = value; }
+    }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="JsonReader"/> class with the specified <see cref="TextReader"/>.
@@ -323,16 +333,42 @@ namespace Newtonsoft.Json
     {
       _readType = ReadType.ReadAsBytes;
 
-      do
-      {
-        if (!ReadInternal())
+        do
+        {
+      if (!ReadInternal())
         throw CreateJsonReaderException("Unexpected end when reading bytes: Line {0}, position {1}.", _currentLineNumber, _currentLinePosition);
-      } while (TokenType == JsonToken.Comment);
+        } while (TokenType == JsonToken.Comment);
 
       if (TokenType == JsonToken.Null)
         return null;
       if (TokenType == JsonToken.Bytes)
         return (byte[]) Value;
+      if (TokenType == JsonToken.StartArray)
+      {
+        List<byte> data = new List<byte>();
+
+        while (ReadInternal())
+        {
+          switch (TokenType)
+          {
+            case JsonToken.Integer:
+              data.Add(Convert.ToByte(Value, CultureInfo.InvariantCulture));
+              break;
+            case JsonToken.EndArray:
+              byte[] d = data.ToArray();
+              SetToken(JsonToken.Bytes, d);
+              return d;
+            case JsonToken.Comment:
+              // skip
+              break;
+            default:
+              throw CreateJsonReaderException("Unexpected token when reading bytes: {0}. Line {1}, position {2}.", TokenType, _currentLineNumber, _currentLinePosition);
+          }
+        }
+
+        throw CreateJsonReaderException("Unexpected end when reading bytes: Line {0}, position {1}.", _currentLineNumber, _currentLinePosition);
+      }
+
 
       throw CreateJsonReaderException("Unexpected token when reading bytes: {0}. Line {1}, position {2}.", TokenType, _currentLineNumber, _currentLinePosition);
     }
@@ -347,17 +383,17 @@ namespace Newtonsoft.Json
       
       do
       {
-        if (!ReadInternal())
-          throw CreateJsonReaderException("Unexpected end when reading decimal: Line {0}, position {1}.", _currentLineNumber, _currentLinePosition);
+      if (!ReadInternal())
+        throw CreateJsonReaderException("Unexpected end when reading decimal: Line {0}, position {1}.", _currentLineNumber, _currentLinePosition);
       } while (TokenType == JsonToken.Comment);
- 
+
       if (TokenType == JsonToken.Null)
         return null;
       if (TokenType == JsonToken.Float)
         return (decimal?)Value;
 
       decimal d;
-      if (TokenType == JsonToken.String && decimal.TryParse((string)Value, NumberStyles.Number, CultureInfo.InvariantCulture, out d))
+      if (TokenType == JsonToken.String && decimal.TryParse((string)Value, NumberStyles.Number, Culture, out d))
       {
         SetToken(JsonToken.Float, d);
         return d;
@@ -377,14 +413,21 @@ namespace Newtonsoft.Json
 
       do
       {
-        if (!ReadInternal())
-          throw CreateJsonReaderException("Unexpected end when reading date: Line {0}, position {1}.", _currentLineNumber, _currentLinePosition);
+      if (!ReadInternal())
+        throw CreateJsonReaderException("Unexpected end when reading date: Line {0}, position {1}.", _currentLineNumber, _currentLinePosition);
       } while (TokenType == JsonToken.Comment);
 
       if (TokenType == JsonToken.Null)
         return null;
       if (TokenType == JsonToken.Date)
         return (DateTimeOffset)Value;
+
+      DateTimeOffset dt;
+      if (TokenType == JsonToken.String && DateTimeOffset.TryParse((string)Value, Culture, DateTimeStyles.None, out dt))
+      {
+        SetToken(JsonToken.Date, dt);
+        return dt;
+      }
 
       throw CreateJsonReaderException("Unexpected token when reading date: {0}. Line {1}, position {2}.", TokenType, _currentLineNumber, _currentLinePosition);
     }

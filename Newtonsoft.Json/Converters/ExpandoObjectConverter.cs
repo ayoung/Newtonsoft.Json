@@ -1,4 +1,4 @@
-﻿#if !(NET35 || NET20 || WINDOWS_PHONE || MONOTOUCH)
+﻿#if !(NET35 || NET20 || WINDOWS_PHONE || MONODROID || MONOTOUCH)
 
 using System;
 using System.Collections.Generic;
