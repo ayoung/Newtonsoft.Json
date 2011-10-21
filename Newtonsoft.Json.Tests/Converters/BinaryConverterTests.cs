@@ -1,9 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
-#if !SILVERLIGHT && !PocketPC && !NET20
+#if !SILVERLIGHT && !PocketPC && !NET20 && !MONOTOUCH && !MONODROID
 using System.Data.Linq;
 #endif
-#if !SILVERLIGHT
+#if !SILVERLIGHT && !MONOTOUCH && !MONODROID
 using System.Data.SqlTypes;
 #endif
 using System.Linq;
@@ -24,7 +24,7 @@ namespace Newtonsoft.Json.Tests.Converters
       public byte[] NullByteArray { get; set; }
     }
 
-#if !SILVERLIGHT && !PocketPC && !NET20
+#if !SILVERLIGHT && !PocketPC && !NET20 && !MONOTOUCH && !MONODROID
     [Test]
     public void DeserializeBinaryClass()
     {
@@ -36,6 +36,20 @@ namespace Newtonsoft.Json.Tests.Converters
       BinaryClass binaryClass = JsonConvert.DeserializeObject<BinaryClass>(json, new BinaryConverter());
 
       Assert.AreEqual(new Binary(TestData), binaryClass.Binary);
+      Assert.AreEqual(null, binaryClass.NullBinary);
+    }
+
+    [Test]
+    public void DeserializeBinaryClassFromJsonArray()
+    {
+      string json = @"{
+  ""Binary"": [0, 1, 2, 3],
+  ""NullBinary"": null
+}";
+
+      BinaryClass binaryClass = JsonConvert.DeserializeObject<BinaryClass>(json, new BinaryConverter());
+
+      Assert.AreEqual(new byte[] { 0, 1, 2, 3 }, binaryClass.Binary.ToArray());
       Assert.AreEqual(null, binaryClass.NullBinary);
     }
 
@@ -76,7 +90,7 @@ namespace Newtonsoft.Json.Tests.Converters
 }", json);
     }
 
-#if !SILVERLIGHT
+#if !SILVERLIGHT && !MONOTOUCH && !MONODROID
     public class SqlBinaryClass
     {
       public SqlBinary SqlBinary { get; set; }
@@ -132,5 +146,18 @@ namespace Newtonsoft.Json.Tests.Converters
       Assert.AreEqual(null, byteArrayClass.NullByteArray);
     }
 
+    [Test]
+    public void DeserializeByteArrayFromJsonArray()
+    {
+      string json = @"{
+  ""ByteArray"": [0, 1, 2, 3],
+  ""NullByteArray"": null
+}";
+
+      ByteArrayClass c = JsonConvert.DeserializeObject<ByteArrayClass>(json);
+      Assert.IsNotNull(c.ByteArray);
+      Assert.AreEqual(4, c.ByteArray.Length);
+      Assert.AreEqual(new byte[] { 0, 1, 2, 3 }, c.ByteArray);
+    }
   }
 }

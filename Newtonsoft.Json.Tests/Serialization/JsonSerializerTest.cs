@@ -25,7 +25,7 @@
 
 using System;
 using System.Collections.Generic;
-#if !SILVERLIGHT && !PocketPC && !NET20
+#if !SILVERLIGHT && !PocketPC && !NET20 && !MONOTOUCH && !MONODROID
 using System.ComponentModel.DataAnnotations;
 using System.Configuration;
 using System.Runtime.CompilerServices;
@@ -43,7 +43,7 @@ using System.Collections.ObjectModel;
 using Newtonsoft.Json.Linq;
 using System.Linq;
 using Newtonsoft.Json.Converters;
-#if !PocketPC && !NET20 && !WINDOWS_PHONE
+#if !PocketPC && !NET20 && !WINDOWS_PHONE && !MONOTOUCH && !MONODROID
 using System.Runtime.Serialization.Json;
 #endif
 using Newtonsoft.Json.Tests.TestObjects;
@@ -57,7 +57,7 @@ using System.Text.RegularExpressions;
 using System.Collections.Specialized;
 using System.Linq.Expressions;
 #endif
-#if !(NET35 || NET20 || WINDOWS_PHONE)
+#if !(NET35 || NET20 || WINDOWS_PHONE || SILVERLIGHT)
 using System.Dynamic;
 using System.ComponentModel;
 #endif
@@ -152,7 +152,7 @@ namespace Newtonsoft.Json.Tests.Serialization
 
       string jsonText = JsonConvert.SerializeObject(testDictionary);
 
-#if !PocketPC && !NET20 && !WINDOWS_PHONE
+#if !PocketPC && !NET20 && !WINDOWS_PHONE && !MONOTOUCH && !MONODROID
       MemoryStream ms = new MemoryStream();
       DataContractJsonSerializer serializer = new DataContractJsonSerializer(typeof(Dictionary<string, object>));
       serializer.WriteObject(ms, testDictionary);
@@ -412,7 +412,7 @@ keyword such as type of business.""
       CollectionAssert.AreEqual(r1, r2);
     }
 
-#if !PocketPC && !NET20 && !WINDOWS_PHONE
+#if !PocketPC && !NET20 && !WINDOWS_PHONE && !MONOTOUCH && !MONODROID
     [Test]
     public void Unicode()
     {
@@ -461,7 +461,8 @@ keyword such as type of business.""
     [Test]
     public void DateTimeTest()
     {
-      List<DateTime> testDates = new List<DateTime> {
+      List<DateTime> testDates = new List<DateTime>
+        {
         new DateTime(100, 1, 1, 1, 1, 1, DateTimeKind.Local),
         new DateTime(100, 1, 1, 1, 1, 1, DateTimeKind.Unspecified),
         new DateTime(100, 1, 1, 1, 1, 1, DateTimeKind.Utc),
@@ -487,7 +488,8 @@ keyword such as type of business.""
     [Test]
     public void DateTimeOffset()
     {
-      List<DateTimeOffset> testDates = new List<DateTimeOffset> {
+      List<DateTimeOffset> testDates = new List<DateTimeOffset>
+        {
         new DateTimeOffset(new DateTime(100, 1, 1, 1, 1, 1, DateTimeKind.Utc)),
         new DateTimeOffset(2000, 1, 1, 1, 1, 1, TimeSpan.Zero),
         new DateTimeOffset(2000, 1, 1, 1, 1, 1, TimeSpan.FromHours(13)),
@@ -1300,16 +1302,19 @@ keyword such as type of business.""
     }
 
     [Test]
-    public void JsonPropertyWithHandlingValues()
+    public void SerializeJsonPropertyWithHandlingValues()
     {
       JsonPropertyWithHandlingValues o = new JsonPropertyWithHandlingValues();
       o.DefaultValueHandlingIgnoreProperty = "Default!";
       o.DefaultValueHandlingIncludeProperty = "Default!";
+      o.DefaultValueHandlingPopulateProperty = "Default!";
+      o.DefaultValueHandlingIgnoreAndPopulateProperty = "Default!";
 
       string json = JsonConvert.SerializeObject(o, Formatting.Indented);
 
       Assert.AreEqual(@"{
   ""DefaultValueHandlingIncludeProperty"": ""Default!"",
+  ""DefaultValueHandlingPopulateProperty"": ""Default!"",
   ""NullValueHandlingIncludeProperty"": null,
   ""ReferenceLoopHandlingErrorProperty"": null,
   ""ReferenceLoopHandlingIgnoreProperty"": null,
@@ -1320,12 +1325,25 @@ keyword such as type of business.""
 
       Assert.AreEqual(@"{
   ""DefaultValueHandlingIncludeProperty"": ""Default!"",
+  ""DefaultValueHandlingPopulateProperty"": ""Default!"",
   ""NullValueHandlingIncludeProperty"": null
 }", json);
     }
 
     [Test]
-    [ExpectedException(typeof(JsonSerializationException))]
+    public void DeserializeJsonPropertyWithHandlingValues()
+    {
+      string json = "{}";
+
+      JsonPropertyWithHandlingValues o = JsonConvert.DeserializeObject<JsonPropertyWithHandlingValues>(json);
+      Assert.AreEqual("Default!", o.DefaultValueHandlingIgnoreAndPopulateProperty);
+      Assert.AreEqual("Default!", o.DefaultValueHandlingPopulateProperty);
+      Assert.AreEqual(null, o.DefaultValueHandlingIgnoreProperty);
+      Assert.AreEqual(null, o.DefaultValueHandlingIncludeProperty);
+    }
+
+    [Test]
+    [ExpectedException(typeof (JsonSerializationException))]
     public void JsonPropertyWithHandlingValues_ReferenceLoopError()
     {
       JsonPropertyWithHandlingValues o = new JsonPropertyWithHandlingValues();
@@ -1366,7 +1384,7 @@ keyword such as type of business.""
       Assert.AreEqual("titleId", n.FidOrder[n.FidOrder.Count - 1]);
     }
 
-#if !SILVERLIGHT && !PocketPC && !NET20
+#if !SILVERLIGHT && !PocketPC && !NET20 && !MONOTOUCH && !MONODROID
     [MetadataType(typeof(OptInClassMetadata))]
     public class OptInClass
     {
@@ -1427,8 +1445,8 @@ keyword such as type of business.""
         Title = title;
       }
 
-      [DataMember]
-      private string _name;
+      [DataMember] private string _name;
+
       [DataMember(Name = "_age")]
       private int Age { get; set; }
       [JsonProperty]
@@ -1805,7 +1823,7 @@ keyword such as type of business.""
 #endif
 
     [Test]
-    [ExpectedException(typeof(JsonSerializationException), ExpectedMessage = @"Unable to find a constructor to use for type Newtonsoft.Json.Tests.TestObjects.Event. A class should either have a default constructor, one constructor with arguments or a constructor marked with the JsonConstructor attribute.")]
+    [ExpectedException(typeof (JsonSerializationException), ExpectedMessage = @"Unable to find a constructor to use for type Newtonsoft.Json.Tests.TestObjects.Event. A class should either have a default constructor, one constructor with arguments or a constructor marked with the JsonConstructor attribute.")]
     public void FailWhenClassWithNoDefaultConstructorHasMultipleConstructorsWithArguments()
     {
       string json = @"{""sublocation"":""AlertEmailSender.Program.Main"",""userId"":0,""type"":0,""summary"":""Loading settings variables"",""details"":null,""stackTrace"":""   at System.Environment.GetStackTrace(Exception e, Boolean needFileInfo)\r\n   at System.Environment.get_StackTrace()\r\n   at mr.Logging.Event..ctor(String summary) in C:\\Projects\\MRUtils\\Logging\\Event.vb:line 71\r\n   at AlertEmailSender.Program.Main(String[] args) in C:\\Projects\\AlertEmailSender\\AlertEmailSender\\Program.cs:line 25"",""tag"":null,""time"":""\/Date(1249591032026-0400)\/""}";
@@ -2312,9 +2330,13 @@ keyword such as type of business.""
     [JsonObject(MemberSerialization.OptIn)]
     public class A
     {
-      [JsonProperty("A1")]
-      private string _A1;
-      public string A1 { get { return _A1; } set { _A1 = value; } }
+      [JsonProperty("A1")] private string _A1;
+
+      public string A1
+      {
+        get { return _A1; }
+        set { _A1 = value; }
+      }
 
       [JsonProperty("A2")]
       private string A2 { get; set; }
@@ -2325,9 +2347,13 @@ keyword such as type of business.""
     {
       public string B1 { get; set; }
 
-      [JsonProperty("B2")]
-      string _B2;
-      public string B2 { get { return _B2; } set { _B2 = value; } }
+      [JsonProperty("B2")] private string _B2;
+
+      public string B2
+      {
+        get { return _B2; }
+        set { _B2 = value; }
+      }
 
       [JsonProperty("B3")]
       private string B3 { get; set; }
@@ -2377,7 +2403,7 @@ keyword such as type of business.""
       public string Ethnicity { get; set; }
     }
 
-#if !NET20 && !PocketPC && !WINDOWS_PHONE
+#if !NET20 && !PocketPC && !WINDOWS_PHONE && !MONOTOUCH && !MONODROID
     public class DataContractJsonSerializerTestClass
     {
       public TimeSpan TimeSpanProperty { get; set; }
@@ -2440,26 +2466,17 @@ keyword such as type of business.""
 
       public int Count
       {
-        get
-        {
-          return _innerDictionary.Count;
-        }
+        get { return _innerDictionary.Count; }
       }
 
       public bool IsReadOnly
       {
-        get
-        {
-          return ((IDictionary<string, T>)_innerDictionary).IsReadOnly;
-        }
+        get { return ((IDictionary<string, T>) _innerDictionary).IsReadOnly; }
       }
 
       public ICollection<string> Keys
       {
-        get
-        {
-          return _innerDictionary.Keys;
-        }
+        get { return _innerDictionary.Keys; }
       }
 
       public T this[string key]
@@ -2470,18 +2487,12 @@ keyword such as type of business.""
           _innerDictionary.TryGetValue(key, out value);
           return value;
         }
-        set
-        {
-          _innerDictionary[key] = value;
-        }
+        set { _innerDictionary[key] = value; }
       }
 
       public ICollection<T> Values
       {
-        get
-        {
-          return _innerDictionary.Values;
-        }
+        get { return _innerDictionary.Values; }
       }
 
       public void Add(KeyValuePair<string, T> item)
@@ -2828,8 +2839,7 @@ keyword such as type of business.""
 
     public class AA
     {
-      [JsonProperty]
-      protected int AA_field1;
+      [JsonProperty] protected int AA_field1;
       protected int AA_field2;
       [JsonProperty]
       protected int AA_property1 { get; set; }
@@ -2861,8 +2871,7 @@ keyword such as type of business.""
 
     public class BB : AA
     {
-      [JsonProperty]
-      public int BB_field1;
+      [JsonProperty] public int BB_field1;
       public int BB_field2;
       [JsonProperty]
       public int BB_property1 { get; set; }
@@ -3256,7 +3265,7 @@ keyword such as type of business.""
     }
 
     [Test]
-    [ExpectedException(typeof(JsonSerializationException), ExpectedMessage = "JSON reference $ref property must have a string value.")]
+    [ExpectedException(typeof (JsonSerializationException), ExpectedMessage = "JSON reference $ref property must have a string or null value.")]
     public void SerializeRefBadType()
     {
       //Additional text found in JSON string after finishing deserializing object.
@@ -3272,6 +3281,27 @@ keyword such as type of business.""
 
       var json = JsonConvert.SerializeObject(child);
       JsonConvert.DeserializeObject<Dictionary<string, object>>(json);
+    }
+
+    [Test]
+    public void SerializeRefNull()
+    {
+      var reference = new Dictionary<string, object>();
+      reference.Add("$ref", null);
+      reference.Add("$id", null);
+      reference.Add("blah", "blah!");
+
+      var child = new Dictionary<string, object>();
+      child.Add("_id", 2);
+      child.Add("Name", "Isabell");
+      child.Add("Father", reference);
+
+      var json = JsonConvert.SerializeObject(child);
+      Dictionary<string, object> result = JsonConvert.DeserializeObject<Dictionary<string, object>>(json);
+
+      Assert.AreEqual(3, result.Count);
+      Assert.AreEqual(1, ((JObject) result["Father"]).Count);
+      Assert.AreEqual("blah!", (string) ((JObject) result["Father"])["blah"]);
     }
 
     public class ConstructorCompexIgnoredProperty
@@ -3389,6 +3419,7 @@ keyword such as type of business.""
       public int Age { get; set; }
       public int Weight { get; set; }
       public int Height { get; set; }
+      public int FavoriteNumber { get; set; }
 
       // dummy. should never be used because it isn't of type bool
       [JsonIgnore]
@@ -3401,12 +3432,17 @@ keyword such as type of business.""
         set { _nameSpecified = value; }
       }
 
-      [JsonIgnore]
-      public bool WeightSpecified;
+      [JsonIgnore] public bool WeightSpecified;
+
+      [JsonIgnore] [System.Xml.Serialization.XmlIgnoreAttribute] public bool HeightSpecified;
 
       [JsonIgnore]
-      [System.Xml.Serialization.XmlIgnoreAttribute]
-      public bool HeightSpecified;
+
+      public bool FavoriteNumberSpecified
+      {
+        // get only example
+        get { return FavoriteNumber != 0; }
+      }
     }
 
     [Test]
@@ -3428,18 +3464,21 @@ keyword such as type of business.""
       Assert.IsFalse(deserialized.NameSpecified);
       Assert.IsFalse(deserialized.WeightSpecified);
       Assert.IsFalse(deserialized.HeightSpecified);
+      Assert.IsFalse(deserialized.FavoriteNumberSpecified);
       Assert.AreEqual(27, deserialized.Age);
 
       c.NameSpecified = true;
       c.WeightSpecified = true;
       c.HeightSpecified = true;
+      c.FavoriteNumber = 23;
       json = JsonConvert.SerializeObject(c, Formatting.Indented);
 
       Assert.AreEqual(@"{
   ""Name"": ""James"",
   ""Age"": 27,
   ""Weight"": 0,
-  ""Height"": 0
+  ""Height"": 0,
+  ""FavoriteNumber"": 23
 }", json);
 
       deserialized = JsonConvert.DeserializeObject<SpecifiedTestClass>(json);
@@ -3447,7 +3486,9 @@ keyword such as type of business.""
       Assert.IsTrue(deserialized.NameSpecified);
       Assert.IsTrue(deserialized.WeightSpecified);
       Assert.IsTrue(deserialized.HeightSpecified);
+      Assert.IsTrue(deserialized.FavoriteNumberSpecified);
       Assert.AreEqual(27, deserialized.Age);
+      Assert.AreEqual(23, deserialized.FavoriteNumber);
     }
 
     //    [Test]
@@ -3497,8 +3538,7 @@ keyword such as type of business.""
       public string FirstOrder;
       // Use the XmlIgnoreAttribute to ignore the 
       // special field named "FirstOrderSpecified".
-      [System.Xml.Serialization.XmlIgnoreAttribute]
-      public bool FirstOrderSpecified;
+      [System.Xml.Serialization.XmlIgnoreAttribute] public bool FirstOrderSpecified;
     }
 
     public class FamilyDetails
@@ -3523,7 +3563,7 @@ keyword such as type of business.""
       martha.NumberOfChildren = 3;
       martha.NumberOfChildrenSpecified = false;
 
-      string json = JsonConvert.SerializeObject(new[] { joe, martha }, Formatting.Indented);
+      string json = JsonConvert.SerializeObject(new[] {joe, martha}, Formatting.Indented);
       //[
       //  {
       //    "Name": "Joe Family Details",
@@ -3743,7 +3783,10 @@ keyword such as type of business.""
 
     public class DerivedEvent : LogEvent
     {
-      public override string EventName { get { return "derived"; } }
+      public override string EventName
+      {
+        get { return "derived"; }
+      }
     }
 
     [Test]
@@ -3756,7 +3799,7 @@ keyword such as type of business.""
 }", json);
     }
 
-#if !(NET35 || NET20 || WINDOWS_PHONE)
+#if !(NET35 || NET20 || WINDOWS_PHONE || SILVERLIGHT)
     [Test]
     public void SerializeExpandoObject()
     {
@@ -3785,13 +3828,13 @@ keyword such as type of business.""
       Assert.IsInstanceOfType(typeof(double), newExpando["Decimal"]);
       Assert.AreEqual(expando.Decimal, newExpando["Decimal"]);
 
-      Assert.IsInstanceOfType(typeof(ExpandoObject), newExpando["Complex"]);
-      IDictionary<string, object> o = (ExpandoObject)newExpando["Complex"];
+      Assert.IsInstanceOfType(typeof (ExpandoObject), newExpando["Complex"]);
+      IDictionary<string, object> o = (ExpandoObject) newExpando["Complex"];
 
-      Assert.IsInstanceOfType(typeof(string), o["String"]);
+      Assert.IsInstanceOfType(typeof (string), o["String"]);
       Assert.AreEqual(expando.Complex.String, o["String"]);
 
-      Assert.IsInstanceOfType(typeof(DateTime), o["DateTime"]);
+      Assert.IsInstanceOfType(typeof (DateTime), o["DateTime"]);
       Assert.AreEqual(expando.Complex.DateTime, o["DateTime"]);
     }
 #endif
@@ -3855,7 +3898,7 @@ keyword such as type of business.""
     public void DeserializeStructProperty()
     {
       VectorParent obj = new VectorParent();
-      obj.Position = new Vector { X = 1, Y = 2, Z = 3 };
+      obj.Position = new Vector {X = 1, Y = 2, Z = 3};
 
       string str = JsonConvert.SerializeObject(obj);
 
@@ -3872,7 +3915,9 @@ keyword such as type of business.""
       [JsonProperty]
       public string IDoWork { get; private set; }
 
-      private Derived() { }
+      private Derived()
+      {
+      }
 
       internal Derived(string dontWork, string doWork)
         : base(dontWork)
@@ -3887,7 +3932,9 @@ keyword such as type of business.""
       [JsonProperty]
       public string IDontWork { get; private set; }
 
-      protected Base() { }
+      protected Base()
+      {
+      }
 
       internal Base(string dontWork)
       {
@@ -3901,16 +3948,16 @@ keyword such as type of business.""
       var derived = new Derived("meh", "woo");
 
       var settings = new JsonSerializerSettings
-      {
-        TypeNameHandling = TypeNameHandling.Objects,
-        ConstructorHandling = ConstructorHandling.AllowNonPublicDefaultConstructor
-      };
+        {
+          TypeNameHandling = TypeNameHandling.Objects,
+          ConstructorHandling = ConstructorHandling.AllowNonPublicDefaultConstructor
+        };
 
       string json = JsonConvert.SerializeObject(derived, Formatting.Indented, settings);
 
       var meh = JsonConvert.DeserializeObject<Base>(json, settings);
 
-      Assert.AreEqual(((Derived)meh).IDoWork, "woo");
+      Assert.AreEqual(((Derived) meh).IDoWork, "woo");
       Assert.AreEqual(meh.IDontWork, "meh");
     }
 
@@ -3963,11 +4010,11 @@ keyword such as type of business.""
     public void DeserializeNullableStruct()
     {
       NullableStructPropertyClass nullableStructPropertyClass = new NullableStructPropertyClass();
-      nullableStructPropertyClass.Foo1 = new StructISerializable() { Name = "foo 1" };
-      nullableStructPropertyClass.Foo2 = new StructISerializable() { Name = "foo 2" };
+      nullableStructPropertyClass.Foo1 = new StructISerializable() {Name = "foo 1"};
+      nullableStructPropertyClass.Foo2 = new StructISerializable() {Name = "foo 2"};
 
       NullableStructPropertyClass barWithNull = new NullableStructPropertyClass();
-      barWithNull.Foo1 = new StructISerializable() { Name = "foo 1" };
+      barWithNull.Foo1 = new StructISerializable() {Name = "foo 1"};
       barWithNull.Foo2 = null;
 
       //throws error on deserialization because bar1.Foo2 is of type Foo?
@@ -3984,15 +4031,15 @@ keyword such as type of business.""
     }
 
 
-    static NullableStructPropertyClass deserialize(string serStr)
+    private static NullableStructPropertyClass deserialize(string serStr)
     {
       return JsonConvert.DeserializeObject<NullableStructPropertyClass>(
         serStr,
         new JsonSerializerSettings
-        {
-          NullValueHandling = NullValueHandling.Ignore,
-          MissingMemberHandling = MissingMemberHandling.Ignore
-        });
+          {
+            NullValueHandling = NullValueHandling.Ignore,
+            MissingMemberHandling = MissingMemberHandling.Ignore
+          });
     }
 #endif
 
@@ -4027,7 +4074,10 @@ keyword such as type of business.""
     [JsonObject(MemberSerialization.OptIn)]
     public class DecimalTest : Test<decimal>
     {
-      protected DecimalTest() { }
+      protected DecimalTest()
+      {
+      }
+
       public DecimalTest(decimal val)
       {
         Value = val;
@@ -4138,7 +4188,7 @@ keyword such as type of business.""
     {
       EnumerableClass c = new EnumerableClass
         {
-          Enumerable = new List<string> { "One", "Two", "Three" }
+          Enumerable = new List<string> {"One", "Two", "Three"}
         };
 
       string json = JsonConvert.SerializeObject(c, Formatting.Indented);
@@ -4207,16 +4257,16 @@ keyword such as type of business.""
     }
 
     [Test]
-    [ExpectedException(typeof(JsonSerializationException), ExpectedMessage = "Error converting value {null} to type 'System.DateTime'.")]
+    [ExpectedException(typeof (JsonSerializationException), ExpectedMessage = "Error converting value {null} to type 'System.DateTime'.")]
     public void DeserializeNullDateTimeValueTest()
     {
-      JsonConvert.DeserializeObject("null", typeof(DateTime));
+      JsonConvert.DeserializeObject("null", typeof (DateTime));
     }
 
     [Test]
     public void DeserializeNullNullableDateTimeValueTest()
     {
-      object dateTime = JsonConvert.DeserializeObject("null", typeof(DateTime?));
+      object dateTime = JsonConvert.DeserializeObject("null", typeof (DateTime?));
 
       Assert.IsNull(dateTime);
     }
@@ -4233,7 +4283,7 @@ keyword such as type of business.""
 
     public class MultiIndexSuper : MultiIndexBase
     {
-      
+
     }
 
     public abstract class MultiIndexBase
@@ -4243,6 +4293,7 @@ keyword such as type of business.""
         get { return null; }
         set { }
       }
+
       protected internal object this[object property]
       {
         get { return null; }
@@ -4278,7 +4329,7 @@ keyword such as type of business.""
       Assert.AreEqual(63, commentTestClass.Values.Count);
     }
 
-    class DTOWithParameterisedConstructor
+    private class DTOWithParameterisedConstructor
     {
       public DTOWithParameterisedConstructor(string A)
       {
@@ -4290,7 +4341,7 @@ keyword such as type of business.""
       public int? B { get; set; }
     }
 
-    class DTOWithoutParameterisedConstructor
+    private class DTOWithoutParameterisedConstructor
     {
       public DTOWithoutParameterisedConstructor()
       {
@@ -4310,5 +4361,545 @@ keyword such as type of business.""
       var withParameterisedConstructor = JsonConvert.DeserializeObject<DTOWithParameterisedConstructor>(json);
       Assert.AreEqual(withoutParameterisedConstructor.B, withParameterisedConstructor.B);
     }
+
+    public class EnumerableArrayPropertyClass
+    {
+      public IEnumerable<int> Numbers
+      {
+        get
+        {
+          return new[] {1, 2, 3}; //fails
+          //return new List<int>(new[] { 1, 2, 3 }); //works
+        }
+      }
+    }
+
+    [Test]
+    public void SkipPopulatingArrayPropertyClass()
+    {
+      string json = JsonConvert.SerializeObject(new EnumerableArrayPropertyClass());
+      JsonConvert.DeserializeObject<EnumerableArrayPropertyClass>(json);
+    }
+
+#if !NET20
+    [DataContract]
+    public class BaseDataContract
+    {
+      [DataMember(Name = "virtualMember")]
+      public virtual string VirtualMember { get; set; }
+
+      [DataMember(Name = "nonVirtualMember")]
+      public string NonVirtualMember { get; set; }
+    }
+
+    public class ChildDataContract : BaseDataContract
+    {
+      public override string VirtualMember { get; set; }
+      public string NewMember { get; set; }
+    }
+
+    [Test]
+    public void ChildDataContractTest()
+    {
+      ChildDataContract cc = new ChildDataContract
+        {
+          VirtualMember = "VirtualMember!",
+          NonVirtualMember = "NonVirtualMember!"
+        };
+
+      string result = JsonConvert.SerializeObject(cc);
+      Assert.AreEqual(@"{""virtualMember"":""VirtualMember!"",""nonVirtualMember"":""NonVirtualMember!""}", result);
+    }
+#endif
+
+    [JsonObject(MemberSerialization = MemberSerialization.OptIn)]
+    public class BaseObject
+    {
+      [JsonProperty(PropertyName = "virtualMember")]
+      public virtual string VirtualMember { get; set; }
+
+      [JsonProperty(PropertyName = "nonVirtualMember")]
+      public string NonVirtualMember { get; set; }
+    }
+
+    public class ChildObject : BaseObject
+    {
+      public override string VirtualMember { get; set; }
+      public string NewMember { get; set; }
+    }
+
+    public class ChildWithDifferentOverrideObject : BaseObject
+    {
+      [JsonProperty(PropertyName = "differentVirtualMember")]
+      public override string VirtualMember { get; set; }
+    }
+
+    [Test]
+    public void ChildObjectTest()
+    {
+      ChildObject cc = new ChildObject
+        {
+          VirtualMember = "VirtualMember!",
+          NonVirtualMember = "NonVirtualMember!"
+        };
+
+      string result = JsonConvert.SerializeObject(cc);
+      Assert.AreEqual(@"{""virtualMember"":""VirtualMember!"",""nonVirtualMember"":""NonVirtualMember!""}", result);
+    }
+
+    [Test]
+    public void ChildWithDifferentOverrideObjectTest()
+    {
+      ChildWithDifferentOverrideObject cc = new ChildWithDifferentOverrideObject
+        {
+          VirtualMember = "VirtualMember!",
+          NonVirtualMember = "NonVirtualMember!"
+        };
+
+      string result = JsonConvert.SerializeObject(cc);
+      Assert.AreEqual(@"{""differentVirtualMember"":""VirtualMember!"",""nonVirtualMember"":""NonVirtualMember!""}", result);
+    }
+
+    [JsonObject(MemberSerialization = MemberSerialization.OptIn)]
+    public interface IInterfaceObject
+    {
+      [JsonProperty(PropertyName = "virtualMember")]
+      [JsonConverter(typeof (IsoDateTimeConverter))]
+      DateTime InterfaceMember { get; set; }
+    }
+
+    public class ImplementInterfaceObject : IInterfaceObject
+    {
+      public DateTime InterfaceMember { get; set; }
+      public string NewMember { get; set; }
+
+      [JsonProperty(PropertyName = "newMemberWithProperty")]
+      public string NewMemberWithProperty { get; set; }
+    }
+
+    [Test]
+    public void ImplementInterfaceObjectTest()
+    {
+      ImplementInterfaceObject cc = new ImplementInterfaceObject
+        {
+          InterfaceMember = new DateTime(2010, 12, 31, 0, 0, 0, DateTimeKind.Utc),
+          NewMember = "NewMember!"
+        };
+
+      string result = JsonConvert.SerializeObject(cc, Formatting.Indented);
+
+      Assert.AreEqual(@"{
+  ""virtualMember"": ""2010-12-31T00:00:00Z"",
+  ""newMemberWithProperty"": null
+}", result);
+    }
+
+    public class NonDefaultConstructorWithReadOnlyCollectionProperty
+    {
+      public string Title { get; set; }
+      public IList<string> Categories { get; private set; }
+
+      public NonDefaultConstructorWithReadOnlyCollectionProperty(string title)
+      {
+        Title = title;
+        Categories = new List<string>();
+      }
+    }
+
+    [Test]
+    public void NonDefaultConstructorWithReadOnlyCollectionPropertyTest()
+    {
+      NonDefaultConstructorWithReadOnlyCollectionProperty c1 = new NonDefaultConstructorWithReadOnlyCollectionProperty("blah");
+      c1.Categories.Add("one");
+      c1.Categories.Add("two");
+
+      string json = JsonConvert.SerializeObject(c1, Formatting.Indented);
+      Assert.AreEqual(@"{
+  ""Title"": ""blah"",
+  ""Categories"": [
+    ""one"",
+    ""two""
+  ]
+}", json);
+
+      NonDefaultConstructorWithReadOnlyCollectionProperty c2 = JsonConvert.DeserializeObject<NonDefaultConstructorWithReadOnlyCollectionProperty>(json);
+      Assert.AreEqual(c1.Title, c2.Title);
+      Assert.AreEqual(c1.Categories.Count, c2.Categories.Count);
+      Assert.AreEqual("one", c2.Categories[0]);
+      Assert.AreEqual("two", c2.Categories[1]);
+    }
+
+    public class NonDefaultConstructorWithReadOnlyDictionaryProperty
+    {
+      public string Title { get; set; }
+      public IDictionary<string, int> Categories { get; private set; }
+
+      public NonDefaultConstructorWithReadOnlyDictionaryProperty(string title)
+      {
+        Title = title;
+        Categories = new Dictionary<string, int>();
+      }
+    }
+
+    [Test]
+    public void NonDefaultConstructorWithReadOnlyDictionaryPropertyTest()
+    {
+      NonDefaultConstructorWithReadOnlyDictionaryProperty c1 = new NonDefaultConstructorWithReadOnlyDictionaryProperty("blah");
+      c1.Categories.Add("one", 1);
+      c1.Categories.Add("two", 2);
+
+      string json = JsonConvert.SerializeObject(c1, Formatting.Indented);
+      Assert.AreEqual(@"{
+  ""Title"": ""blah"",
+  ""Categories"": {
+    ""one"": 1,
+    ""two"": 2
+  }
+}", json);
+
+      NonDefaultConstructorWithReadOnlyDictionaryProperty c2 = JsonConvert.DeserializeObject<NonDefaultConstructorWithReadOnlyDictionaryProperty>(json);
+      Assert.AreEqual(c1.Title, c2.Title);
+      Assert.AreEqual(c1.Categories.Count, c2.Categories.Count);
+      Assert.AreEqual(1, c2.Categories["one"]);
+      Assert.AreEqual(2, c2.Categories["two"]);
+    }
+
+    [JsonObject(MemberSerialization.OptIn)]
+    public class ClassAttributeBase
+    {
+      [JsonProperty]
+      public string BaseClassValue { get; set; }
+    }
+
+    public class ClassAttributeDerived : ClassAttributeBase
+    {
+      [JsonProperty]
+      public string DerivedClassValue { get; set; }
+
+      public string NonSerialized { get; set; }
+    }
+
+    public class CollectionClassAttributeDerived : ClassAttributeBase, ICollection<object>
+    {
+      [JsonProperty]
+      public string CollectionDerivedClassValue { get; set; }
+
+      public void Add(object item)
+      {
+        throw new NotImplementedException();
+      }
+
+      public void Clear()
+      {
+        throw new NotImplementedException();
+      }
+
+      public bool Contains(object item)
+      {
+        throw new NotImplementedException();
+      }
+
+      public void CopyTo(object[] array, int arrayIndex)
+      {
+        throw new NotImplementedException();
+      }
+
+      public int Count
+      {
+        get { throw new NotImplementedException(); }
+      }
+
+      public bool IsReadOnly
+      {
+        get { throw new NotImplementedException(); }
+      }
+
+      public bool Remove(object item)
+      {
+        throw new NotImplementedException();
+      }
+
+      public IEnumerator<object> GetEnumerator()
+      {
+        throw new NotImplementedException();
+      }
+
+      IEnumerator IEnumerable.GetEnumerator()
+      {
+        throw new NotImplementedException();
+      }
+    }
+
+    [Test]
+    public void ClassAttributesInheritance()
+    {
+      string json = JsonConvert.SerializeObject(new ClassAttributeDerived
+        {
+          BaseClassValue = "BaseClassValue!",
+          DerivedClassValue = "DerivedClassValue!",
+          NonSerialized = "NonSerialized!"
+        }, Formatting.Indented);
+
+      Assert.AreEqual(@"{
+  ""DerivedClassValue"": ""DerivedClassValue!"",
+  ""BaseClassValue"": ""BaseClassValue!""
+}", json);
+
+      json = JsonConvert.SerializeObject(new CollectionClassAttributeDerived
+        {
+          BaseClassValue = "BaseClassValue!",
+          CollectionDerivedClassValue = "CollectionDerivedClassValue!"
+        }, Formatting.Indented);
+
+      Assert.AreEqual(@"{
+  ""CollectionDerivedClassValue"": ""CollectionDerivedClassValue!"",
+  ""BaseClassValue"": ""BaseClassValue!""
+}", json);
+    }
+
+    public class PrivateMembersClassWithAttributes
+    {
+      public PrivateMembersClassWithAttributes(string privateString, string internalString, string readonlyString)
+      {
+        _privateString = privateString;
+        _readonlyString = readonlyString;
+        _internalString = internalString;
+      }
+
+      public PrivateMembersClassWithAttributes()
+      {
+        _readonlyString = "default!";
+      }
+
+      [JsonProperty] private string _privateString;
+      [JsonProperty] private readonly string _readonlyString;
+      [JsonProperty] internal string _internalString;
+
+      public string UseValue()
+      {
+        return _readonlyString;
+      }
+    }
+
+    [Test]
+    public void PrivateMembersClassWithAttributesTest()
+    {
+      PrivateMembersClassWithAttributes c1 = new PrivateMembersClassWithAttributes("privateString!", "internalString!", "readonlyString!");
+
+      string json = JsonConvert.SerializeObject(c1, Formatting.Indented);
+      Assert.AreEqual(@"{
+  ""_privateString"": ""privateString!"",
+  ""_readonlyString"": ""readonlyString!"",
+  ""_internalString"": ""internalString!""
+}", json);
+
+      PrivateMembersClassWithAttributes c2 = JsonConvert.DeserializeObject<PrivateMembersClassWithAttributes>(json);
+      Assert.AreEqual("readonlyString!", c2.UseValue());
+    }
+
+    public partial class BusRun
+    {
+      public IEnumerable<Nullable<DateTime>> Departures { get; set; }
+      public Boolean WheelchairAccessible { get; set; }
+    }
+
+    [Test]
+    public void DeserializeGenericEnumerableProperty()
+    {
+      BusRun r = JsonConvert.DeserializeObject<BusRun>("{\"Departures\":[\"\\/Date(1309874148734-0400)\\/\",\"\\/Date(1309874148739-0400)\\/\",null],\"WheelchairAccessible\":true}");
+
+      Assert.AreEqual(3, r.Departures.Count());
+      Assert.IsNotNull(r.Departures.ElementAt(0));
+      Assert.IsNotNull(r.Departures.ElementAt(1));
+      Assert.IsNull(r.Departures.ElementAt(2));
+    }
+
+#if !(NET20)
+    [DataContract]
+    public class BaseType
+    {
+
+      [DataMember] public string zebra;
+    }
+
+    [DataContract]
+    public class DerivedType : BaseType
+    {
+      [DataMember(Order = 0)] public string bird;
+      [DataMember(Order = 1)] public string parrot;
+      [DataMember] public string dog;
+      [DataMember(Order = 3)] public string antelope;
+      [DataMember] public string cat;
+      [JsonProperty(Order = 1)] public string albatross;
+      [JsonProperty(Order = -2)] public string dinosaur;
+    }
+
+    [Test]
+    public void JsonPropertyDataMemberOrder()
+    {
+      DerivedType d = new DerivedType();
+      string json = JsonConvert.SerializeObject(d, Formatting.Indented);
+
+      Assert.AreEqual(@"{
+  ""dinosaur"": null,
+  ""dog"": null,
+  ""cat"": null,
+  ""zebra"": null,
+  ""bird"": null,
+  ""parrot"": null,
+  ""albatross"": null,
+  ""antelope"": null
+}", json);
+    }
+#endif
+
+    public class ClassWithException
+    {
+      public IList<Exception> Exceptions { get; set; }
+
+      public ClassWithException()
+      {
+        Exceptions = new List<Exception>();
+      }
+    }
+
+#if !(SILVERLIGHT || WINDOWS_PHONE)
+    [Test]
+    public void SerializeException1()
+    {
+      ClassWithException classWithException = new ClassWithException();
+      try
+      {
+        throw new Exception("Test Exception");
+      }
+      catch (Exception ex)
+      {
+        classWithException.Exceptions.Add(ex);
+      }
+      string sex = JsonConvert.SerializeObject(classWithException);
+      ClassWithException dex = JsonConvert.DeserializeObject<ClassWithException>(sex);
+      Assert.AreEqual(dex.Exceptions[0].ToString(), dex.Exceptions[0].ToString());
+
+      sex = JsonConvert.SerializeObject(classWithException, Formatting.Indented);
+
+      dex = JsonConvert.DeserializeObject<ClassWithException>(sex); // this fails!
+      Assert.AreEqual(dex.Exceptions[0].ToString(), dex.Exceptions[0].ToString());
+    }
+#endif
+
+    public void DeserializeIDictionary()
+    {
+      IDictionary dictionary = JsonConvert.DeserializeObject<IDictionary>("{'name':'value!'}");
+      Assert.AreEqual(1, dictionary.Count);
+      Assert.AreEqual("value!", dictionary["name"]);
+    }
+
+    public void DeserializeIList()
+    {
+      IList list = JsonConvert.DeserializeObject<IList>("['1', 'two', 'III']");
+      Assert.AreEqual(3, list.Count);
+    }
+
+    public void UriGuidTimeSpanTestClassEmptyTest()
+    {
+      UriGuidTimeSpanTestClass c1 = new UriGuidTimeSpanTestClass();
+      string json = JsonConvert.SerializeObject(c1, Formatting.Indented);
+
+      Assert.AreEqual(@"{
+  ""Guid"": ""00000000-0000-0000-0000-000000000000"",
+  ""NullableGuid"": null,
+  ""TimeSpan"": ""00:00:00"",
+  ""NullableTimeSpan"": null,
+  ""Uri"": null
+}", json);
+
+      UriGuidTimeSpanTestClass c2 = JsonConvert.DeserializeObject<UriGuidTimeSpanTestClass>(json);
+      Assert.AreEqual(c1.Guid, c2.Guid);
+      Assert.AreEqual(c1.NullableGuid, c2.NullableGuid);
+      Assert.AreEqual(c1.TimeSpan, c2.TimeSpan);
+      Assert.AreEqual(c1.NullableTimeSpan, c2.NullableTimeSpan);
+      Assert.AreEqual(c1.Uri, c2.Uri);
+    }
+
+    public void UriGuidTimeSpanTestClassValuesTest()
+    {
+      UriGuidTimeSpanTestClass c1 = new UriGuidTimeSpanTestClass
+        {
+          Guid = new Guid("1924129C-F7E0-40F3-9607-9939C531395A"),
+          NullableGuid = new Guid("9E9F3ADF-E017-4F72-91E0-617EBE85967D"),
+          TimeSpan = TimeSpan.FromDays(1),
+          NullableTimeSpan = TimeSpan.FromHours(1),
+          Uri = new Uri("http://testuri.com")
+        };
+      string json = JsonConvert.SerializeObject(c1, Formatting.Indented);
+
+      Assert.AreEqual(@"{
+  ""Guid"": ""1924129c-f7e0-40f3-9607-9939c531395a"",
+  ""NullableGuid"": ""9e9f3adf-e017-4f72-91e0-617ebe85967d"",
+  ""TimeSpan"": ""1.00:00:00"",
+  ""NullableTimeSpan"": ""01:00:00"",
+  ""Uri"": ""http://testuri.com/""
+}", json);
+
+      UriGuidTimeSpanTestClass c2 = JsonConvert.DeserializeObject<UriGuidTimeSpanTestClass>(json);
+      Assert.AreEqual(c1.Guid, c2.Guid);
+      Assert.AreEqual(c1.NullableGuid, c2.NullableGuid);
+      Assert.AreEqual(c1.TimeSpan, c2.TimeSpan);
+      Assert.AreEqual(c1.NullableTimeSpan, c2.NullableTimeSpan);
+      Assert.AreEqual(c1.Uri, c2.Uri);
+    }
+
+    [Test]
+    public void NullableValueGenericDictionary()
+    {
+      IDictionary<string, int?> v1 = new Dictionary<string, int?>
+        {
+          {"First", 1},
+          {"Second", null},
+          {"Third", 3}
+        };
+
+      string json = JsonConvert.SerializeObject(v1, Formatting.Indented);
+
+      Assert.AreEqual(@"{
+  ""First"": 1,
+  ""Second"": null,
+  ""Third"": 3
+}", json);
+
+      IDictionary<string, int?> v2 = JsonConvert.DeserializeObject<IDictionary<string, int?>>(json);
+      Assert.AreEqual(3, v2.Count);
+      Assert.AreEqual(1, v2["First"]);
+      Assert.AreEqual(null, v2["Second"]);
+      Assert.AreEqual(3, v2["Third"]);
+    }
+
+    [Test]
+    public void UsingJsonTextWriter()
+    {
+      // The property of the object has to be a number for the cast exception to occure
+      object o = new {p = 1};
+
+      var json = JObject.FromObject(o);
+
+      using (var sw = new StringWriter())
+      using (var jw = new JsonTextWriter(sw))
+      {
+        jw.WriteToken(json.CreateReader());
+        jw.Flush();
+
+        string result = sw.ToString();
+        Assert.AreEqual(@"{""p"":1}", result);
+      }
+    }
+  }
+
+  public class UriGuidTimeSpanTestClass
+  {
+    public Guid Guid { get; set; }
+    public Guid? NullableGuid { get; set; }
+    public TimeSpan TimeSpan { get; set; }
+    public TimeSpan? NullableTimeSpan { get; set; }
+    public Uri Uri { get; set; }
   }
 }

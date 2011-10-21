@@ -25,9 +25,10 @@
 
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
-#if !(NET35 || NET20 || WINDOWS_PHONE || MONOTOUCH)
+#if !(NET35 || NET20 || WINDOWS_PHONE || SILVERLIGHT || MONOTOUCH)
 using System.Dynamic;
 using System.Linq.Expressions;
 #endif
@@ -35,9 +36,6 @@ using System.Linq;
 using System.IO;
 using Newtonsoft.Json.Utilities;
 using System.Globalization;
-#if !PocketPC && !SILVERLIGHT
-using Newtonsoft.Json.Linq.ComponentModel;
-#endif
 
 namespace Newtonsoft.Json.Linq
 {
@@ -48,16 +46,60 @@ namespace Newtonsoft.Json.Linq
 #if !(PocketPC || SILVERLIGHT)
     , ICustomTypeDescriptor
 #endif
-#if !(PocketPC || SILVERLIGHT || NET20)
+#if !(PocketPC || SILVERLIGHT || NET20 || MONODROID || MONOTOUCH)
     , INotifyPropertyChanging
 #endif
   {
+    private class JPropertKeyedCollection : KeyedCollection<string, JToken>
+    {
+      public JPropertKeyedCollection(IEqualityComparer<string> comparer)
+        : base(comparer)
+      {
+      }
+
+      protected override string GetKeyForItem(JToken item)
+      {
+        return ((JProperty) item).Name;
+      }
+
+      protected override void InsertItem(int index, JToken item)
+      {
+        if (Dictionary == null)
+        {
+          base.InsertItem(index, item);
+        }
+        else
+        {
+          // need to override so that the dictionary key is always set rather than added
+          string keyForItem = GetKeyForItem(item);
+          Dictionary[keyForItem] = item;
+          Items.Insert(index, item);
+        }
+      }
+
+      public new IDictionary<string, JToken> Dictionary
+      {
+        get { return base.Dictionary; }
+      }
+    }
+
+    private JPropertKeyedCollection _properties = new JPropertKeyedCollection(StringComparer.Ordinal);
+
+    /// <summary>
+    /// Gets the container's children tokens.
+    /// </summary>
+    /// <value>The container's children tokens.</value>
+    protected override IList<JToken> ChildrenTokens
+    {
+      get { return _properties; }
+    }
+
     /// <summary>
     /// Occurs when a property value changes.
     /// </summary>
     public event PropertyChangedEventHandler PropertyChanged;
 
-#if !(PocketPC || SILVERLIGHT || NET20)
+#if !(PocketPC || SILVERLIGHT || NET20 || MONODROID || MONOTOUCH)
     /// <summary>
     /// Occurs when a property value is changing.
     /// </summary>
@@ -104,6 +146,15 @@ namespace Newtonsoft.Json.Linq
       return (t != null && ContentsEqual(t));
     }
 
+    internal override void InsertItem(int index, JToken item)
+    {
+      // don't add comments to JObject, no name to reference comment by
+      if (item != null && item.Type == JTokenType.Comment)
+        return;
+
+      base.InsertItem(index, item);
+    }
+
     internal override void ValidateToken(JToken o, JToken existing)
     {
       ValidationUtils.ArgumentNotNull(o, "o");
@@ -111,30 +162,34 @@ namespace Newtonsoft.Json.Linq
       if (o.Type != JTokenType.Property)
         throw new ArgumentException("Can not add {0} to {1}.".FormatWith(CultureInfo.InvariantCulture, o.GetType(), GetType()));
 
-      // looping over all properties every time isn't good
-      // need to think about performance here
-      JProperty property = (JProperty)o;
-      foreach (JProperty childProperty in Children())
+      JProperty newProperty = (JProperty) o;
+
+      if (existing != null)
       {
-        if (childProperty != existing && string.Equals(childProperty.Name, property.Name, StringComparison.Ordinal))
-          throw new ArgumentException("Can not add property {0} to {1}. Property with the same name already exists on object.".FormatWith(CultureInfo.InvariantCulture, property.Name, GetType()));
+        JProperty existingProperty = (JProperty) existing;
+
+        if (newProperty.Name == existingProperty.Name)
+          return;
       }
+
+      if (_properties.Dictionary != null && _properties.Dictionary.TryGetValue(newProperty.Name, out existing))
+        throw new ArgumentException("Can not add property {0} to {1}. Property with the same name already exists on object.".FormatWith(CultureInfo.InvariantCulture, newProperty.Name, GetType()));
     }
 
     internal void InternalPropertyChanged(JProperty childProperty)
     {
       OnPropertyChanged(childProperty.Name);
-#if !SILVERLIGHT
+#if !(SILVERLIGHT || MONODROID || MONOTOUCH)
       OnListChanged(new ListChangedEventArgs(ListChangedType.ItemChanged, IndexOfItem(childProperty)));
 #endif
-#if SILVERLIGHT || !(NET20 || NET35)
+#if !MONOTOUCH && SILVERLIGHT || !(NET20 || NET35)
       OnCollectionChanged(new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Replace, childProperty, childProperty, IndexOfItem(childProperty)));
 #endif
     }
 
     internal void InternalPropertyChanging(JProperty childProperty)
     {
-#if !PocketPC && !SILVERLIGHT && !NET20
+#if !PocketPC && !SILVERLIGHT && !NET20 && !MONODROID && !MONOTOUCH
       OnPropertyChanging(childProperty.Name);
 #endif
     }
@@ -159,7 +214,7 @@ namespace Newtonsoft.Json.Linq
     /// <returns>An <see cref="IEnumerable{JProperty}"/> of this object's properties.</returns>
     public IEnumerable<JProperty> Properties()
     {
-      return Children().Cast<JProperty>();
+      return ChildrenTokens.Cast<JProperty>();
     }
 
     /// <summary>
@@ -169,9 +224,14 @@ namespace Newtonsoft.Json.Linq
     /// <returns>A <see cref="JProperty"/> with the specified name or null.</returns>
     public JProperty Property(string name)
     {
-      return Properties()
-        .Where(p => string.Equals(p.Name, name, StringComparison.Ordinal))
-        .SingleOrDefault();
+      if (_properties.Dictionary == null)
+        return null;
+      if (name == null)
+        return null;
+
+      JToken property;
+      _properties.Dictionary.TryGetValue(name, out property);
+      return (JProperty)property;
     }
 
     /// <summary>
@@ -234,7 +294,7 @@ namespace Newtonsoft.Json.Linq
         }
         else
         {
-#if !PocketPC && !SILVERLIGHT && !NET20
+#if !PocketPC && !SILVERLIGHT && !NET20 && !MONODROID && !MONOTOUCH
           OnPropertyChanging(propertyName);
 #endif
           Add(new JProperty(propertyName, value));
@@ -257,11 +317,12 @@ namespace Newtonsoft.Json.Linq
         if (!reader.Read())
           throw new Exception("Error reading JObject from JsonReader.");
       }
-
       if (reader.TokenType != JsonToken.StartObject)
+      {
         throw new Exception(
           "Error reading JObject from JsonReader. Current JsonReader item is not an object: {0}".FormatWith(
             CultureInfo.InvariantCulture, reader.TokenType));
+      }
 
       JObject o = new JObject();
       o.SetLineInfo(reader as IJsonLineInfo);
@@ -318,7 +379,7 @@ namespace Newtonsoft.Json.Linq
     {
       writer.WriteStartObject();
 
-      foreach (JProperty property in ChildrenInternal())
+      foreach (JProperty property in ChildrenTokens)
       {
         property.WriteTo(writer, converters);
       }
@@ -339,12 +400,15 @@ namespace Newtonsoft.Json.Linq
 
     bool IDictionary<string, JToken>.ContainsKey(string key)
     {
-      return (Property(key) != null);
+      if (_properties.Dictionary == null)
+        return false;
+
+      return _properties.Dictionary.ContainsKey(key);
     }
 
     ICollection<string> IDictionary<string, JToken>.Keys
     {
-      get { throw new NotImplementedException(); }
+      get { return _properties.Dictionary.Keys; }
     }
 
     /// <summary>
@@ -383,7 +447,7 @@ namespace Newtonsoft.Json.Linq
 
     ICollection<JToken> IDictionary<string, JToken>.Values
     {
-      get { throw new NotImplementedException(); }
+      get { return _properties.Dictionary.Values; }
     }
 
     #endregion
@@ -421,21 +485,11 @@ namespace Newtonsoft.Json.Linq
         throw new ArgumentException("The number of elements in the source JObject is greater than the available space from arrayIndex to the end of the destination array.");
 
       int index = 0;
-      foreach (JProperty property in Properties())
+      foreach (JProperty property in ChildrenTokens)
       {
         array[arrayIndex + index] = new KeyValuePair<string, JToken>(property.Name, property.Value);
         index++;
       }
-    }
-
-    /// <summary>
-    /// Gets the number of elements contained in the <see cref="T:System.Collections.Generic.ICollection`1"/>.
-    /// </summary>
-    /// <value></value>
-    /// <returns>The number of elements contained in the <see cref="T:System.Collections.Generic.ICollection`1"/>.</returns>
-    public int Count
-    {
-      get { return Children().Count(); }
     }
 
     bool ICollection<KeyValuePair<string,JToken>>.IsReadOnly
@@ -467,7 +521,7 @@ namespace Newtonsoft.Json.Linq
     /// </returns>
     public IEnumerator<KeyValuePair<string, JToken>> GetEnumerator()
     {
-      foreach (JProperty property in Properties())
+      foreach (JProperty property in ChildrenTokens)
       {
         yield return new KeyValuePair<string, JToken>(property.Name, property.Value);
       }
@@ -483,7 +537,7 @@ namespace Newtonsoft.Json.Linq
         PropertyChanged(this, new PropertyChangedEventArgs(propertyName));
     }
 
-#if !PocketPC && !SILVERLIGHT && !NET20
+#if !PocketPC && !SILVERLIGHT && !NET20 && !MONODROID && !MONOTOUCH
     /// <summary>
     /// Raises the <see cref="PropertyChanging"/> event with the provided arguments.
     /// </summary>
@@ -654,7 +708,7 @@ namespace Newtonsoft.Json.Linq
     #endregion
 #endif
 
-#if !(NET35 || NET20 || WINDOWS_PHONE || MONOTOUCH)
+#if !(NET35 || NET20 || WINDOWS_PHONE || SILVERLIGHT || MONOTOUCH)
     /// <summary>
     /// Returns the <see cref="T:System.Dynamic.DynamicMetaObject"/> responsible for binding operations performed on this object.
     /// </summary>

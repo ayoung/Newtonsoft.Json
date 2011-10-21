@@ -31,6 +31,7 @@ using System.Text;
 using NUnit.Framework;
 using Newtonsoft.Json.Bson;
 using System.IO;
+using Newtonsoft.Json.Tests.Serialization;
 using Newtonsoft.Json.Utilities;
 using Newtonsoft.Json.Linq;
 
@@ -801,7 +802,54 @@ namespace Newtonsoft.Json.Tests.Bson
 
       reader = new BsonReader(new MemoryStream(bson), false, DateTimeKind.Unspecified);
       o = (JObject)JToken.ReadFrom(reader);
-      Assert.AreEqual(DateTime.SpecifyKind(value.ToLocalTime(), DateTimeKind.Unspecified), (DateTime)o["DateTime"]);
+      Assert.AreEqual(DateTime.SpecifyKind(value, DateTimeKind.Unspecified), (DateTime)o["DateTime"]);
+    }
+
+    [Test]
+    public void UnspecifiedDateTimeKindHandling()
+    {
+      DateTime value = new DateTime(2000, 1, 1, 0, 0, 0, DateTimeKind.Unspecified);
+
+      MemoryStream ms = new MemoryStream();
+      BsonWriter writer = new BsonWriter(ms);
+      writer.DateTimeKindHandling = DateTimeKind.Unspecified;
+
+      writer.WriteStartObject();
+      writer.WritePropertyName("DateTime");
+      writer.WriteValue(value);
+      writer.WriteEndObject();
+
+      byte[] bson = ms.ToArray();
+
+      JObject o;
+      BsonReader reader;
+
+      reader = new BsonReader(new MemoryStream(bson), false, DateTimeKind.Unspecified);
+      o = (JObject)JToken.ReadFrom(reader);
+      Assert.AreEqual(value, (DateTime)o["DateTime"]);
+    }
+
+    [Test]
+    public void LocalDateTimeKindHandling()
+    {
+      DateTime value = new DateTime(2000, 1, 1, 0, 0, 0, DateTimeKind.Local);
+
+      MemoryStream ms = new MemoryStream();
+      BsonWriter writer = new BsonWriter(ms);
+
+      writer.WriteStartObject();
+      writer.WritePropertyName("DateTime");
+      writer.WriteValue(value);
+      writer.WriteEndObject();
+
+      byte[] bson = ms.ToArray();
+
+      JObject o;
+      BsonReader reader;
+
+      reader = new BsonReader(new MemoryStream(bson), false, DateTimeKind.Local);
+      o = (JObject)JToken.ReadFrom(reader);
+      Assert.AreEqual(value, (DateTime)o["DateTime"]);
     }
 
     private string WriteAndReadStringValue(string val)
@@ -1116,6 +1164,55 @@ namespace Newtonsoft.Json.Tests.Bson
 
       Assert.IsTrue(reader.Read());
       Assert.AreEqual(JsonToken.EndObject, reader.TokenType);
+    }
+
+    public void UriGuidTimeSpanTestClassEmptyTest()
+    {
+      UriGuidTimeSpanTestClass c1 = new UriGuidTimeSpanTestClass();
+
+      var memoryStream = new MemoryStream();
+      var bsonWriter = new BsonWriter(memoryStream);
+      JsonSerializer serializer = new JsonSerializer();
+      serializer.Serialize(bsonWriter, c1);
+      bsonWriter.Flush();
+      memoryStream.Position = 0;
+
+      var bsonReader = new BsonReader(memoryStream);
+
+      UriGuidTimeSpanTestClass c2 = serializer.Deserialize<UriGuidTimeSpanTestClass>(bsonReader);
+      Assert.AreEqual(c1.Guid, c2.Guid);
+      Assert.AreEqual(c1.NullableGuid, c2.NullableGuid);
+      Assert.AreEqual(c1.TimeSpan, c2.TimeSpan);
+      Assert.AreEqual(c1.NullableTimeSpan, c2.NullableTimeSpan);
+      Assert.AreEqual(c1.Uri, c2.Uri);
+    }
+
+    public void UriGuidTimeSpanTestClassValuesTest()
+    {
+      UriGuidTimeSpanTestClass c1 = new UriGuidTimeSpanTestClass
+      {
+        Guid = new Guid("1924129C-F7E0-40F3-9607-9939C531395A"),
+        NullableGuid = new Guid("9E9F3ADF-E017-4F72-91E0-617EBE85967D"),
+        TimeSpan = TimeSpan.FromDays(1),
+        NullableTimeSpan = TimeSpan.FromHours(1),
+        Uri = new Uri("http://testuri.com")
+      };
+
+      var memoryStream = new MemoryStream();
+      var bsonWriter = new BsonWriter(memoryStream);
+      JsonSerializer serializer = new JsonSerializer();
+      serializer.Serialize(bsonWriter, c1);
+      bsonWriter.Flush();
+      memoryStream.Position = 0;
+
+      var bsonReader = new BsonReader(memoryStream);
+
+      UriGuidTimeSpanTestClass c2 = serializer.Deserialize<UriGuidTimeSpanTestClass>(bsonReader);
+      Assert.AreEqual(c1.Guid, c2.Guid);
+      Assert.AreEqual(c1.NullableGuid, c2.NullableGuid);
+      Assert.AreEqual(c1.TimeSpan, c2.TimeSpan);
+      Assert.AreEqual(c1.NullableTimeSpan, c2.NullableTimeSpan);
+      Assert.AreEqual(c1.Uri, c2.Uri);
     }
   }
 }

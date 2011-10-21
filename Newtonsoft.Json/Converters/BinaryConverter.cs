@@ -24,11 +24,12 @@
 #endregion
 
 using System;
-#if !SILVERLIGHT
+#if !(SILVERLIGHT || MONODROID || MONOTOUCH)
 using System.Data.SqlTypes;
 #endif
 using System.Globalization;
 using Newtonsoft.Json.Utilities;
+using System.Collections.Generic;
 
 namespace Newtonsoft.Json.Converters
 {
@@ -69,14 +70,14 @@ namespace Newtonsoft.Json.Converters
 
     private byte[] GetByteArray(object value)
     {
-#if !SILVERLIGHT && !PocketPC && !NET20
+#if !SILVERLIGHT && !PocketPC && !NET20 && !MONODROID
       if (value.GetType().AssignableToTypeName(BinaryTypeName))
       {
         IBinary binary = DynamicWrapper.CreateWrapper<IBinary>(value);
         return binary.ToArray();
       }
 #endif
-#if !SILVERLIGHT
+#if !(SILVERLIGHT || MONODROID || MONOTOUCH)
       if (value is SqlBinary)
         return ((SqlBinary) value).Value;
 #endif
@@ -105,23 +106,57 @@ namespace Newtonsoft.Json.Converters
         return null;
       }
 
-      if (reader.TokenType != JsonToken.String)
-        throw new Exception("Unexpected token parsing binary. Expected String, got {0}.".FormatWith(CultureInfo.InvariantCulture, reader.TokenType));
+      byte[] data;
 
+      if (reader.TokenType == JsonToken.StartArray)
+      {
+        data = ReadByteArray(reader);
+      }
+      else if (reader.TokenType == JsonToken.String)
+      {
       // current token is already at base64 string
       // unable to call ReadAsBytes so do it the old fashion way
       string encodedData = reader.Value.ToString();
-      byte[] data = Convert.FromBase64String(encodedData);
+        data = Convert.FromBase64String(encodedData);
+      }
+      else
+      {
+        throw new Exception("Unexpected token parsing binary. Expected String or StartArray, got {0}.".FormatWith(CultureInfo.InvariantCulture, reader.TokenType));
+      }
 
-#if !SILVERLIGHT && !PocketPC && !NET20
+#if !SILVERLIGHT && !PocketPC && !NET20 && !MONODROID
       if (t.AssignableToTypeName(BinaryTypeName))
         return Activator.CreateInstance(t, data);
 #endif
-#if !SILVERLIGHT
+#if !(SILVERLIGHT || MONODROID || MONOTOUCH)
       if (t == typeof(SqlBinary))
         return new SqlBinary(data);
 #endif
       throw new Exception("Unexpected object type when writing binary: {0}".FormatWith(CultureInfo.InvariantCulture, objectType));
+    }
+
+    private byte[] ReadByteArray(JsonReader reader)
+    {
+      List<byte> byteList = new List<byte>();
+
+      while (reader.Read())
+      {
+        switch (reader.TokenType)
+        {
+          case JsonToken.Integer:
+            byteList.Add(Convert.ToByte(reader.Value, CultureInfo.InvariantCulture));
+            break;
+          case JsonToken.EndArray:
+            return byteList.ToArray();
+          case JsonToken.Comment:
+            // skip
+            break;
+          default:
+            throw new Exception("Unexpected token when reading bytes: {0}".FormatWith(CultureInfo.InvariantCulture, reader.TokenType));
+        }
+      }
+
+      throw new Exception("Unexpected end when reading bytes.");
     }
 
     /// <summary>
@@ -133,11 +168,11 @@ namespace Newtonsoft.Json.Converters
     /// </returns>
     public override bool CanConvert(Type objectType)
     {
-#if !SILVERLIGHT && !PocketPC && !NET20
+#if !SILVERLIGHT && !PocketPC && !NET20 && !MONODROID
       if (objectType.AssignableToTypeName(BinaryTypeName))
         return true;
 #endif
-#if !SILVERLIGHT
+#if !(SILVERLIGHT || MONODROID || MONOTOUCH)
       if (objectType == typeof(SqlBinary) || objectType == typeof(SqlBinary?))
         return true;
 #endif

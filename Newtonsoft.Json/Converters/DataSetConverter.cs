@@ -23,9 +23,10 @@
 // OTHER DEALINGS IN THE SOFTWARE.
 #endregion
 
-#if !SILVERLIGHT
+#if !(SILVERLIGHT || MONODROID || MONOTOUCH)
 using System;
 using System.Data;
+using Newtonsoft.Json.Serialization;
 
 namespace Newtonsoft.Json.Converters
 {
@@ -43,6 +44,7 @@ namespace Newtonsoft.Json.Converters
     public override void WriteJson(JsonWriter writer, object value, JsonSerializer serializer)
     {
       DataSet dataSet = (DataSet)value;
+      DefaultContractResolver resolver = serializer.ContractResolver as DefaultContractResolver;
 
       DataTableConverter converter = new DataTableConverter();
 
@@ -50,7 +52,7 @@ namespace Newtonsoft.Json.Converters
 
       foreach (DataTable table in dataSet.Tables)
       {
-        writer.WritePropertyName(table.TableName);
+        writer.WritePropertyName((resolver != null) ? resolver.ResolvePropertyName(table.TableName) : table.TableName);
         
         converter.WriteJson(writer, table, serializer);
       }

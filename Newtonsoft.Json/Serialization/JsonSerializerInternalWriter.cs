@@ -27,7 +27,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.ComponentModel;
-#if !(NET35 || NET20 || WINDOWS_PHONE || MONOTOUCH)
+#if !(NET35 || NET20 || WINDOWS_PHONE || SILVERLIGHT)
 using System.Dynamic;
 #endif
 using System.Globalization;
@@ -86,6 +86,25 @@ namespace Newtonsoft.Json.Serialization
       return Serializer.ContractResolver.ResolveContract(value.GetType());
     }
 
+    private void SerializePrimitive(JsonWriter writer, object value, JsonPrimitiveContract contract, JsonProperty member, JsonContract collectionValueContract)
+    {
+      if (contract.UnderlyingType == typeof (byte[]))
+      {
+        bool includeTypeDetails = ShouldWriteType(TypeNameHandling.Objects, contract, member, collectionValueContract);
+        if (includeTypeDetails)
+        {
+          writer.WriteStartObject();
+          WriteTypeProperty(writer, contract.CreatedType);
+          writer.WritePropertyName(JsonTypeReflector.ValuePropertyName);
+          writer.WriteValue(value);
+          writer.WriteEndObject();
+          return;
+        }
+      }
+
+      writer.WriteValue(value);
+    }
+
     private void SerializeValue(JsonWriter writer, object value, JsonContract valueContract, JsonProperty member, JsonContract collectionValueContract)
     {
       JsonConverter converter = (member != null) ? member.Converter : null;
@@ -106,11 +125,11 @@ namespace Newtonsoft.Json.Serialization
       }
       else if (valueContract is JsonPrimitiveContract)
       {
-        writer.WriteValue(value);
+        SerializePrimitive(writer, value, (JsonPrimitiveContract)valueContract, member, collectionValueContract);
       }
       else if (valueContract is JsonStringContract)
       {
-        SerializeString(writer, value, (JsonStringContract)valueContract);
+        SerializeString(writer, value, (JsonStringContract) valueContract);
       }
       else if (valueContract is JsonObjectContract)
       {
@@ -118,12 +137,12 @@ namespace Newtonsoft.Json.Serialization
       }
       else if (valueContract is JsonDictionaryContract)
       {
-        JsonDictionaryContract dictionaryContract = (JsonDictionaryContract)valueContract;
+        JsonDictionaryContract dictionaryContract = (JsonDictionaryContract) valueContract;
         SerializeDictionary(writer, dictionaryContract.CreateWrapper(value), dictionaryContract, member, collectionValueContract);
       }
       else if (valueContract is JsonArrayContract)
       {
-        JsonArrayContract arrayContract = (JsonArrayContract)valueContract;
+        JsonArrayContract arrayContract = (JsonArrayContract) valueContract;
         SerializeList(writer, arrayContract.CreateWrapper(value), arrayContract, member, collectionValueContract);
       }
       else if (valueContract is JsonLinqContract)
@@ -133,13 +152,13 @@ namespace Newtonsoft.Json.Serialization
 #if !SILVERLIGHT && !PocketPC
       else if (valueContract is JsonISerializableContract)
       {
-        SerializeISerializable(writer, (ISerializable)value, (JsonISerializableContract)valueContract);
+        SerializeISerializable(writer, (ISerializable) value, (JsonISerializableContract) valueContract);
       }
 #endif
-#if !(NET35 || NET20 || WINDOWS_PHONE || MONOTOUCH)
+#if !(NET35 || NET20 || WINDOWS_PHONE || SILVERLIGHT)
       else if (valueContract is JsonDynamicContract)
       {
-        SerializeDynamic(writer, (IDynamicMetaObjectProvider)value, (JsonDynamicContract)valueContract);
+        SerializeDynamic(writer, (IDynamicMetaObjectProvider) value, (JsonDynamicContract) valueContract);
       }
 #endif
     }
@@ -183,8 +202,8 @@ namespace Newtonsoft.Json.Serialization
           memberValue == null)
         return;
 
-      if (property.DefaultValueHandling.GetValueOrDefault(Serializer.DefaultValueHandling) ==
-          DefaultValueHandling.Ignore && MiscellaneousUtils.ValueEquals(memberValue, defaultValue))
+      if (HasFlag(property.DefaultValueHandling.GetValueOrDefault(Serializer.DefaultValueHandling), DefaultValueHandling.Ignore)
+        && MiscellaneousUtils.ValueEquals(memberValue, defaultValue))
         return;
 
       if (ShouldWriteReference(memberValue, property, contract))
@@ -243,9 +262,9 @@ namespace Newtonsoft.Json.Serialization
       // use the objectType's TypeConverter if it has one and can convert to a string
       if (converter != null
 #if !SILVERLIGHT
- && !(converter is ComponentConverter)
+        && !(converter is ComponentConverter)
 #endif
- && converter.GetType() != typeof(TypeConverter))
+        && converter.GetType() != typeof(TypeConverter))
       {
         if (converter.CanConvertTo(typeof(string)))
         {
@@ -338,7 +357,12 @@ namespace Newtonsoft.Json.Serialization
     private void WriteTypeProperty(JsonWriter writer, Type type)
     {
       writer.WritePropertyName(JsonTypeReflector.TypePropertyName);
-      writer.WriteValue(ReflectionUtils.GetTypeName(type, Serializer.TypeNameAssemblyFormat));
+      writer.WriteValue(ReflectionUtils.GetTypeName(type, Serializer.TypeNameAssemblyFormat, Serializer.Binder));
+    }
+
+    private bool HasFlag(DefaultValueHandling value, DefaultValueHandling flag)
+    {
+      return ((value & flag) == flag);
     }
 
     private bool HasFlag(PreserveReferencesHandling value, PreserveReferencesHandling flag)
@@ -474,7 +498,7 @@ namespace Newtonsoft.Json.Serialization
     }
 #endif
 
-#if !(NET35 || NET20 || WINDOWS_PHONE || MONOTOUCH)
+#if !(NET35 || NET20 || WINDOWS_PHONE || SILVERLIGHT)
     /// <summary>
     /// Serializes the dynamic.
     /// </summary>
@@ -516,8 +540,15 @@ namespace Newtonsoft.Json.Serialization
 
       if (member != null)
       {
-        if ((member.TypeNameHandling ?? Serializer.TypeNameHandling) == TypeNameHandling.Auto && contract.UnderlyingType != member.PropertyType)
+        if ((member.TypeNameHandling ?? Serializer.TypeNameHandling) == TypeNameHandling.Auto
+          // instance and property type are different
+          && contract.UnderlyingType != member.PropertyType)
+        {
+          JsonContract memberTypeContract = Serializer.ContractResolver.ResolveContract(member.PropertyType);
+          // instance type and the property's type's contract default type are different (no need to put the type in JSON because the type will be created by default)
+          if (contract.UnderlyingType != memberTypeContract.CreatedType)
           return true;
+      }
       }
       else if (collectionValueContract != null)
       {

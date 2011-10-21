@@ -10,7 +10,7 @@ using Newtonsoft.Json.Converters;
 using System.IO;
 using System.Collections;
 using System.Collections.Specialized;
-#if !PocketPC && !SILVERLIGHT
+#if !PocketPC && !SILVERLIGHT && !MONOTOUCH && !MONODROID
 using System.Web.UI;
 #endif
 
@@ -466,15 +466,15 @@ Parameter name: arrayIndex")]
       string jsonText = @"{
   ""short"":
   {
-    ""original"":""http://www.foo.com/"",
-    ""short"":""krehqk"",
+		      ""original"":""http://www.foo.com/"",
+		      ""short"":""krehqk"",
     ""error"":
     {
-      ""code"":0,
+			      ""code"":0,
       ""msg"":""No action taken""
     }
   }
-}";
+		  }";
 
       JObject json = JObject.Parse(jsonText);
 
@@ -599,7 +599,7 @@ Parameter name: arrayIndex")]
       Assert.AreEqual(p4, l[1]);
     }
 
-#if !PocketPC && !SILVERLIGHT && !NET20
+#if !PocketPC && !SILVERLIGHT && !NET20 && !MONOTOUCH && !MONODROID
     [Test]
     public void PropertyChanging()
     {
@@ -1124,7 +1124,7 @@ Parameter name: arrayIndex")]
       l[1] = p3;
     }
 
-#if !SILVERLIGHT
+#if !(SILVERLIGHT || MONOTOUCH || MONODROID)
     [Test]
     public void IBindingListSortDirection()
     {
@@ -1591,5 +1591,38 @@ Parameter name: arrayIndex")]
       Assert.AreEqual(false, prop4.ShouldSerializeValue(o));
     }
 #endif
+    [Test]
+    public void ParseEmptyObjectWithComment()
+    {
+      JObject o = JObject.Parse("{ /* A Comment */ }");
+      Assert.AreEqual(0, o.Count);
+    }
+
+    [Test]
+    public void FromObjectTimeSpan()
+    {
+      JValue v = (JValue)JToken.FromObject(TimeSpan.FromDays(1));
+      Assert.AreEqual(v.Value, TimeSpan.FromDays(1));
+
+      Assert.AreEqual("1.00:00:00", v.ToString());
+    }
+
+    [Test]
+    public void FromObjectUri()
+    {
+      JValue v = (JValue)JToken.FromObject(new Uri("http://www.stuff.co.nz"));
+      Assert.AreEqual(v.Value, new Uri("http://www.stuff.co.nz"));
+
+      Assert.AreEqual("http://www.stuff.co.nz/", v.ToString());
+    }
+
+    [Test]
+    public void FromObjectGuid()
+    {
+      JValue v = (JValue)JToken.FromObject(new Guid("9065ACF3-C820-467D-BE50-8D4664BEAF35"));
+      Assert.AreEqual(v.Value, new Guid("9065ACF3-C820-467D-BE50-8D4664BEAF35"));
+
+      Assert.AreEqual("9065acf3-c820-467d-be50-8d4664beaf35", v.ToString());
+    }
   }
 }

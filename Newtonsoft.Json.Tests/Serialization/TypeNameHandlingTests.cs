@@ -41,6 +41,52 @@ namespace Newtonsoft.Json.Tests.Serialization
 {
   public class TypeNameHandlingTests : TestFixtureBase
   {
+    public class Wrapper
+    {
+      public IList<EmployeeReference> Array { get; set; }
+      public IDictionary<string, EmployeeReference> Dictionary { get; set; }
+    }
+
+    [Test]
+    public void sdfsdf()
+    {
+      Wrapper wrapper = new Wrapper();
+      wrapper.Array = new List<EmployeeReference>
+        {
+          new EmployeeReference()
+        };
+      wrapper.Dictionary = new Dictionary<string, EmployeeReference>
+        {
+          { "First", new EmployeeReference() }
+        };
+
+      string json = JsonConvert.SerializeObject(wrapper, Formatting.Indented, new JsonSerializerSettings
+        {
+          TypeNameHandling = TypeNameHandling.Auto
+        });
+
+      Assert.AreEqual(@"{
+  ""Array"": [
+    {
+      ""$id"": ""1"",
+      ""Name"": null,
+      ""Manager"": null
+    }
+  ],
+  ""Dictionary"": {
+    ""First"": {
+      ""$id"": ""2"",
+      ""Name"": null,
+      ""Manager"": null
+    }
+  }
+}", json);
+
+      Wrapper w2 = JsonConvert.DeserializeObject<Wrapper>(json);
+      Assert.IsInstanceOfType(typeof(List<EmployeeReference>), w2.Array);
+      Assert.IsInstanceOfType(typeof(Dictionary<string, EmployeeReference>), w2.Dictionary);
+    }
+
     [Test]
     public void WriteTypeNameForObjects()
     {
@@ -430,7 +476,6 @@ namespace Newtonsoft.Json.Tests.Serialization
       Assert.AreEqual(5, nested[4]);
     }
 
-#if !SILVERLIGHT && !PocketPC
     [Test]
     public void DeserializeUsingCustomBinder()
     {
@@ -458,6 +503,89 @@ namespace Newtonsoft.Json.Tests.Serialization
       public override Type BindToType(string assemblyName, string typeName)
       {
         return typeof (Person);
+      }
+    }
+
+#if !(NET20 || NET35)
+    [Test]
+    public void SerializeUsingCustomBinder()
+    {
+      IList<object> values = new List<object>
+        {
+          new Person
+            {
+              BirthDate = new DateTime(2000, 10, 23, 1, 1, 1, DateTimeKind.Utc),
+              LastModified = new DateTime(2000, 10, 23, 1, 1, 1, DateTimeKind.Utc),
+              Name = "Name!",
+              Department = "Department!"
+            },
+            new Employee
+              {
+              BirthDate = new DateTime(2000, 10, 23, 1, 1, 1, DateTimeKind.Utc),
+              FirstName = "FirstName!",
+              LastName = "LastName!",
+              Department = "Department!",
+              JobTitle = "JobTitle!"
+              }
+        };
+
+      string json = JsonConvert.SerializeObject(values, Formatting.Indented, new JsonSerializerSettings
+      {
+        TypeNameHandling = TypeNameHandling.Auto,
+        Binder = new CompleteSerializationBinder()
+      });
+      
+      Assert.AreEqual(@"[
+  {
+    ""$type"": ""Person"",
+    ""Name"": ""Name!"",
+    ""BirthDate"": ""\/Date(972262861000)\/"",
+    ""LastModified"": ""\/Date(972262861000)\/""
+  },
+  {
+    ""$type"": ""Employee"",
+    ""FirstName"": ""FirstName!"",
+    ""LastName"": ""LastName!"",
+    ""BirthDate"": ""\/Date(972262861000)\/"",
+    ""Department"": ""Department!"",
+    ""JobTitle"": ""JobTitle!""
+  }
+]", json);
+
+      IList<object> newValues = JsonConvert.DeserializeObject<IList<object>>(json, new JsonSerializerSettings
+        {
+          TypeNameHandling = TypeNameHandling.Auto,
+          Binder = new CompleteSerializationBinder()
+        });
+
+      Assert.IsInstanceOfType(typeof(Person), newValues[0]);
+      Person person = (Person)newValues[0];
+      Assert.AreEqual("Name!", person.Name);
+
+      Assert.IsInstanceOfType(typeof(Employee), newValues[1]);
+      Employee employee = (Employee)newValues[1];
+      Assert.AreEqual("FirstName!", employee.FirstName);
+    }
+
+    public class CompleteSerializationBinder : SerializationBinder
+    {
+      public override void BindToName(Type serializedType, out string assemblyName, out string typeName)
+      {
+        assemblyName = null;
+        typeName = serializedType.Name;
+      }
+
+      public override Type BindToType(string assemblyName, string typeName)
+      {
+        switch (typeName)
+        {
+          case "Employee":
+            return typeof (Employee);
+          case "Person":
+            return typeof (Person);
+          default:
+            throw new ArgumentException();
+        }
       }
     }
 #endif
@@ -703,6 +831,56 @@ namespace Newtonsoft.Json.Tests.Serialization
       }
     }
 
+    public class Car
+    {
+      // included in JSON
+      public string Model { get; set; }
+      public DateTime Year { get; set; }
+      public List<string> Features { get; set; }
+      public object[] Objects { get; set; }
+
+      // ignored
+      [JsonIgnore]
+      public DateTime LastModified { get; set; }
+    }
+
+    [Test]
+    public void ByteArrays()
+    {
+      Car testerObject = new Car();
+      byte[] data = new byte[] {75, 65, 82, 73, 82, 65};
+      testerObject.Objects = new object[] { data, "prueba" };
+
+      JsonSerializerSettings jsonSettings = new JsonSerializerSettings();
+      jsonSettings.NullValueHandling = NullValueHandling.Ignore;
+      jsonSettings.TypeNameHandling = TypeNameHandling.All;
+
+      string output = JsonConvert.SerializeObject(testerObject, Formatting.Indented, jsonSettings);
+
+      string carClassRef = ReflectionUtils.GetTypeName(typeof(Car), FormatterAssemblyStyle.Simple);
+
+      Assert.AreEqual(output, @"{
+  ""$type"": """ + carClassRef + @""",
+  ""Year"": ""\/Date(-62135596800000+1300)\/"",
+  ""Objects"": {
+    ""$type"": ""System.Object[], mscorlib"",
+    ""$values"": [
+      {
+        ""$type"": ""System.Byte[], mscorlib"",
+        ""$value"": ""S0FSSVJB""
+      },
+      ""prueba""
+    ]
+  }
+}");
+      Car obj = JsonConvert.DeserializeObject<Car>(output, jsonSettings);
+
+      Assert.IsNotNull(obj);
+
+      Assert.IsTrue(obj.Objects[0] is byte[]);
+
+      Assert.AreEqual(data, obj.Objects[0]);
+    }
   }
 
   public class Message
