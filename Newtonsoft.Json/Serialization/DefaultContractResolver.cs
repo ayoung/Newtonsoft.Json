@@ -667,7 +667,7 @@ namespace Newtonsoft.Json.Serialization
         return CreateISerializableContract(t);
 #endif
 
-#if !(NET35 || NET20 || WINDOWS_PHONE)
+#if !(NET35 || NET20 || WINDOWS_PHONE || MONOTOUCH)
       if (typeof(IDynamicMetaObjectProvider).IsAssignableFrom(t))
         return CreateDynamicContract(t);
 #endif
